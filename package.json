@@ -1,0 +1,35 @@
+{
+  "name": "pepper-persona-poc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "transcribe": "tsx src/cli/transcribe.ts",
+    "analyze": "tsx src/cli/analyze.ts",
+    "prompt": "tsx src/cli/prompt.ts",
+    "generate-agent": "tsx src/cli/generateAgent.ts",
+    "vapi:create": "tsx src/cli/vapiCreate.ts",
+    "vapi:call": "tsx src/cli/vapiCall.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shinjanpatra01/pepper-persona-poc.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shinjanpatra01/pepper-persona-poc/issues"
+  },
+  "homepage": "https://github.com/shinjanpatra01/pepper-persona-poc#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^7.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

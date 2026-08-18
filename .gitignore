@@ -1,0 +1,7 @@
+node_modules/
+.env
+
+# Source audio is large; we keep a source *reference* instead (PRD 6).
+*.mp3
+*.wav
+*.m4a

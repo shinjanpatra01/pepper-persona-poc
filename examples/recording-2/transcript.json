@@ -1,0 +1,62 @@
+{
+  "source": "examples/recording-2/audio.mp3",
+  "notes": "Voca CIC AI receptionist demo, trimmed 0:00-1:33, https://www.youtube.com/watch?v=faMKPA9_8Y0",
+  "turns": [
+    {
+      "speaker": "agent",
+      "text": "Hello. Thank you for calling Paws and Claws Veterinary Clinic. I see you're calling from a number we have on file. Is this Sarah Mitchell?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Hi. Yeah."
+    },
+    {
+      "speaker": "agent",
+      "text": "Perfect. Thank you for confirming. Your last visit was on 02/18/2026 for viscous cruciate ligament repair surgery. How can I help today?"
+    },
+    {
+      "speaker": "customer",
+      "text": "I just need to book a follow-up."
+    },
+    {
+      "speaker": "agent",
+      "text": "I can see Biscuit had surgery on 02/18/2026. Follow-up consultations within ninety days are included at no extra cost. Let me check availability for you. What date and time would you prefer for the appointment?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Do you have Wednesday at 10AM?"
+    },
+    {
+      "speaker": "agent",
+      "text": "I have Wednesday at 10AM available. I'll book Biscuit in for the follow-up appointment then. Just to confirm, is there a specific vet you would like to see?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Is Doctor Patel available?"
+    },
+    {
+      "speaker": "agent",
+      "text": "Let me check if Doctor Patel is available at that time. One moment, please. Checking availability. Yes. Doctor Patel is available on Wednesday at 10AM. Shall I go ahead and book that appointment for Biscuit?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Yeah, please."
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. I've booked Biscuit in for a follow-up appointment on Wednesday at 10AM with Doctor. Patel. I'll send you a confirmation SMS with the details shortly. Is there anything else I can help you with today?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Do you guys do dental care?"
+    },
+    {
+      "speaker": "agent",
+      "text": "Yes. We do offer dental care services. Professional dental scaling starts from a $120 depending on your dog's size. Let me connect you with one of our team members to discuss this in more detail."
+    },
+    {
+      "speaker": "customer",
+      "text": "Okay."
+    }
+  ]
+}

@@ -1,0 +1,218 @@
+{
+  "source": "examples/recording-1/audio.mp3",
+  "notes": "LIVE COLD CALL - Batman, https://www.youtube.com/watch?v=jlaetKa-Pt8",
+  "turns": [
+    {
+      "speaker": "customer",
+      "text": "Hello. Speaking."
+    },
+    {
+      "speaker": "agent",
+      "text": "Good morning. Am I totally good over in the start of your week if I mentioned this is a sales call?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Depends if you're selling anything good."
+    },
+    {
+      "speaker": "agent",
+      "text": "I'll take thirty seconds. You can decide. Is that fair?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Go on."
+    },
+    {
+      "speaker": "agent",
+      "text": "Excellent. Basically, I've worked with a CRO specifically to fix a couple of problems with the sales team. It's either that they're a little bit tired of their team scrolling on Instagram and LinkedIn instead of cold calling. Or"
+    },
+    {
+      "speaker": "customer",
+      "text": "Hold on. Are you telling me wait. You sound like you're talking about b to b."
+    },
+    {
+      "speaker": "agent",
+      "text": "This would be sales training, actually. B to b and b c."
+    },
+    {
+      "speaker": "customer",
+      "text": "But that might not be irrelevant at all then? Or Well, I was gonna say I don't know what you what what I don't know what you're talking about with LinkedIn. But"
+    },
+    {
+      "speaker": "agent",
+      "text": "No. Scrolling on LinkedIn. They're scrolling on LinkedIn instead of cold calling. That's what I meant. Okay. So so basically, it's either that or perhaps they pick up the phone, they make the calls, but they're just not really generating enough qualified pipeline. Again, in in a nutshell, I'm a sales trainer, but you might tell me now, you know, your salespeople are so good they can even beat a jet to holiday, and then I can let you get on with your Monday."
+    },
+    {
+      "speaker": "customer",
+      "text": "I mean, my team is pretty good."
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. Pretty good. Why not perfect?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Well, tell tell me more about your sales training. I don't do any b to b, so I don't care about calling from LinkedIn. That's ridiculous. My real problem is having enough data for my team, not about their closing. They're pretty good at converting, actually."
+    },
+    {
+      "speaker": "agent",
+      "text": "Uh-huh."
+    },
+    {
+      "speaker": "customer",
+      "text": "But that that's really the point."
+    },
+    {
+      "speaker": "agent",
+      "text": "Oh, okay. Interesting. So when you say data, you mean mobile data. Right? Phone numbers."
+    },
+    {
+      "speaker": "customer",
+      "text": "Yeah. Phone numbers."
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. It it seems because look, I myself am a sales trader, specifically working on getting those skills up, but I am also an investor in a company that gets a lot of data. That's how I got your number actually. So I wonder, have you ever heard of a company called Fuller Ridge?"
+    },
+    {
+      "speaker": "customer",
+      "text": "No. I haven't."
+    },
+    {
+      "speaker": "agent",
+      "text": "Oh, okay. So if I told you that basically the way it works, just put a list of people and this could be coming like from websites, from LinkedIn, from wherever it is, and you'll just gonna match and try to find the mobile numbers. Is that type of thing you're gonna be like, okay. That's exactly what I need or or you're tell me, no. God. Please go away."
+    },
+    {
+      "speaker": "customer",
+      "text": "No. I need it for I need it for addresses. If you can get me the mobile numbers for certain addresses in my area, then I'll take that."
+    },
+    {
+      "speaker": "agent",
+      "text": "For certain addresses, no. I don't I don't think we can go that well. I don't think we can do that well. It's got it's gotta be still tied to a specific person. It could've been something that"
+    },
+    {
+      "speaker": "customer",
+      "text": "Yep. Yeah. That's that's really my problem. So no, mate. Look. I don't think you I don't think you can help, but I do appreciate the call, and thanks for letting me know. Good luck."
+    },
+    {
+      "speaker": "agent",
+      "text": "Yeah. Can I ask one last question for a gossip?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Sure."
+    },
+    {
+      "speaker": "agent",
+      "text": "So so when you mentioned, you know, your sales team is pretty good, does that mean you don't think that they know their objection and their overall sales calls could be improved at?"
+    },
+    {
+      "speaker": "customer",
+      "text": "When, of course, they could."
+    },
+    {
+      "speaker": "agent",
+      "text": "Hold on. So if that were the case, then would you want someone like a sales trainer with an external eye to tell you whether it could be done?"
+    },
+    {
+      "speaker": "customer",
+      "text": "I would, but I'm not sure it's really on my priority list right now, to be fair. I've got a pretty good I mean, I've got a pretty good team leader in there who is good at coaching and training, and they are I mean, is everyone perfect? No. But I'm not sure that's necessarily big on my priority list, to be fair."
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. Okay. Well, I I appreciate the full honesty. So I guess when do you think this might become a priority if it if it would?"
+    },
+    {
+      "speaker": "customer",
+      "text": "I mean, I think that, like, that should be one of the core competencies of improving our team internally anyway. So if I haven't got the right people to do it, then then"
+    },
+    {
+      "speaker": "agent",
+      "text": "Yeah. But if you're then okay. Okay. So you maybe you're telling me that you're gonna always hire internally, you wouldn't consider at all, an external person to avoid this."
+    },
+    {
+      "speaker": "customer",
+      "text": "I don't. I mean, look. My experience in the past, we're we're too small to sort of engage that kind of spend that hasn't worked particularly well. So I'd rather do that internally, I guess."
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. Can I can I ask one last question, and then I promise I'll talk?"
+    },
+    {
+      "speaker": "customer",
+      "text": "Sure."
+    },
+    {
+      "speaker": "agent",
+      "text": "Have you ever had someone like a sales trainer keep you on the phone this long after all these objections you gave him?"
+    },
+    {
+      "speaker": "customer",
+      "text": "No."
+    },
+    {
+      "speaker": "agent",
+      "text": "Wow."
+    },
+    {
+      "speaker": "customer",
+      "text": "No. I haven't."
+    },
+    {
+      "speaker": "agent",
+      "text": "So I'm just wondering. So you wouldn't even be curious to find out how that might look for your team?"
+    },
+    {
+      "speaker": "customer",
+      "text": "What would you do different than other sales trainers?"
+    },
+    {
+      "speaker": "agent",
+      "text": "That's a that's a really good question, and I'm happy to to jump on a quick call, show you what that is in fifteen minutes. And then if you think it's rubbish, you'll never hear my Italian accent again."
+    },
+    {
+      "speaker": "customer",
+      "text": "Okay. Fine. Well, actually, you can speak to my sales director if you want. Why don't you send me some information? I'll introduce you."
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. I'm more than happy to do so. And look, just one thing is like if if I send you an email, it's gonna probably gonna be dropped somewhere and then, you know, probably gonna never hear from you again. So why don't we put something into the calendar, and you can tell me you can get to join us as well."
+    },
+    {
+      "speaker": "customer",
+      "text": "Okay. I can't see my calendar right now because you're running on my mobile."
+    },
+    {
+      "speaker": "agent",
+      "text": "So I'll tell you what, why don't I send you an invite for Friday afternoon, which is usually a pretty easy time? And then if you think, okay. That works, then you can reschedule it or or you can accept it. Otherwise, you can reschedule it."
+    },
+    {
+      "speaker": "customer",
+      "text": "Fine. I mean, I'm definitely on a train on Friday afternoon, so that's no good for me. Have you tried next Friday afternoon?"
+    },
+    {
+      "speaker": "agent",
+      "text": "Okay. Perfect. I could do that. I could do that next Friday, 3PM. And I've got is your email"
+    },
+    {
+      "speaker": "customer",
+      "text": "It is."
+    },
+    {
+      "speaker": "agent",
+      "text": "Perfect. So I look forward to speaking to you in a couple of weeks."
+    },
+    {
+      "speaker": "customer",
+      "text": "Okay. Excellent. Alright. Thanks, mate. Have a good day. Bye."
+    },
+    {
+      "speaker": "agent",
+      "text": "Cheers. Bye bye."
+    },
+    {
+      "speaker": "customer",
+      "text": "Bye bye."
+    }
+  ]
+}
