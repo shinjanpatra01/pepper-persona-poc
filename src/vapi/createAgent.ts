@@ -1,6 +1,7 @@
 import { optionalEnv } from "../lib/env.js";
 import type { AgentSpec } from "../types.js";
 import { vapi, type VapiAssistant } from "./client.js";
+import type { VoiceSelection } from "./voiceMapping.js";
 
 /**
  * Create or update the recreated agent in Vapi (PRD 4.2).
@@ -19,6 +20,12 @@ export interface CreateAgentInput {
   label: string;
   /** Update this assistant instead of creating a new one. */
   existingAssistantId?: string;
+  /**
+   * Chosen from the audio-derived voice profile, when the optional voice pass
+   * has been run. Omitted, Vapi picks its own default voice - which keeps the
+   * transcript-only path a clean control for the PRD 5 comparison.
+   */
+  voice?: VoiceSelection;
 }
 
 export interface CreateAgentResult {
@@ -32,7 +39,7 @@ export async function createOrUpdateAgent(
   // Vapi caps assistant names at 40 characters.
   const name = `${input.label} - ${input.spec.role}`.slice(0, 40);
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     name,
     firstMessage: input.firstMessage,
     model: {
@@ -40,9 +47,20 @@ export async function createOrUpdateAgent(
       model: optionalEnv("VAPI_MODEL", "gpt-4o"),
       messages: [{ role: "system", content: input.systemPrompt }],
     },
-    // transcriber, voice, turn detection and endpointing are intentionally
-    // omitted so Vapi applies its defaults.
+    // transcriber, turn detection and endpointing are intentionally omitted so
+    // Vapi applies its defaults (PRD 4.2).
   };
+
+  // Voice is the one default we override, and only when we have measured
+  // evidence for it. Accent, gender and rate are the parts of a persona a
+  // stock TTS voice can actually carry.
+  if (input.voice) {
+    payload.voice = {
+      provider: input.voice.provider,
+      voiceId: input.voice.voiceId,
+      speed: input.voice.speed,
+    };
+  }
 
   if (input.existingAssistantId) {
     const assistant = await vapi.patch<VapiAssistant>(
