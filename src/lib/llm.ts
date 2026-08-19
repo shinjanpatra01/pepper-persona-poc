@@ -68,7 +68,7 @@ export function describeLlm(): string {
  * rethrown immediately rather than retried.
  */
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
-  const delaysMs = [1000, 3000, 8000];
+  const delaysMs = [2000, 5000, 15000, 30000];
 
   for (let attempt = 0; ; attempt++) {
     try {
@@ -79,11 +79,18 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
 
       if (!transient || attempt >= delaysMs.length) throw error;
 
-      const wait = delaysMs[attempt]!;
+      // Providers usually say how long to wait; obeying that beats guessing.
+      // Gemini phrases it as "Please retry in 24.04s" inside the error body.
+      const message = String((error as Error).message ?? "");
+      const hinted = message.match(/retry in ([\d.]+)s/i);
+      const wait = hinted
+        ? Math.ceil(Number(hinted[1]) * 1000) + 1000
+        : delaysMs[attempt]!;
+
       console.warn(
-        `  provider returned ${status ?? "a network error"}; retrying in ${
+        `  provider returned ${status ?? "a network error"}; waiting ${Math.round(
           wait / 1000
-        }s (attempt ${attempt + 2} of ${delaysMs.length + 1})...`
+        )}s (attempt ${attempt + 2} of ${delaysMs.length + 1})...`
       );
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
@@ -168,6 +175,69 @@ export async function completeJson<T>(
   }
 
   throw new Error("unreachable");
+}
+
+/**
+ * Same contract as completeJson, but the user turn also carries audio.
+ *
+ * Multimodal input goes through the standard OpenAI "input_audio" content
+ * part, which Gemini's compatibility endpoint accepts. Keeping it here rather
+ * than in the voice module means the provider-swapping property of this file
+ * still holds: any OpenAI-compatible endpoint with audio support works.
+ */
+export async function completeAudioJson<T>(
+  options: CompleteOptions & {
+    schema: ZodType<T>;
+    schemaName: string;
+    audioBase64: string;
+    audioFormat: "mp3" | "wav";
+  }
+): Promise<T> {
+  const { client, config } = getClient();
+  const jsonSchema = toStrictJsonSchema(options.schema);
+
+  const response = await withRetry(() =>
+    client.chat.completions.create({
+      model: config.model,
+      temperature: options.temperature ?? 0,
+      messages: [
+        { role: "system", content: options.system },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: options.user },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: options.audioBase64,
+                format: options.audioFormat,
+              },
+            },
+          ],
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: options.schemaName,
+          schema: jsonSchema,
+          strict: true,
+        },
+      },
+    })
+  );
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("The model returned an empty response.");
+
+  const result = options.schema.safeParse(JSON.parse(content));
+  if (!result.success) {
+    throw new Error(
+      "The voice profile did not match the schema:\n" +
+        JSON.stringify(result.error.issues, null, 2)
+    );
+  }
+  return result.data;
 }
 
 /** Plain text completion, used by the Phase 4 prompt generator. */

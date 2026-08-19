@@ -7,11 +7,19 @@ import { optionalEnv, requireEnv } from "../lib/env.js";
  * WHICH voice said it, but not yet WHO that voice is (agent or customer).
  * Mapping speaker numbers to roles happens in ./speakers.ts.
  */
+export interface DeepgramWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
 export interface DeepgramUtterance {
   speaker: number;
   transcript: string;
   start: number;
   end: number;
+  /** Per-word timings. These are the raw material for prosody measurement. */
+  words: DeepgramWord[];
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -88,7 +96,7 @@ export async function transcribeWithDeepgram(
   }
 
   const json = (await response.json()) as {
-    results?: { utterances?: DeepgramUtterance[] };
+    results?: { utterances?: (DeepgramUtterance & { words?: DeepgramWord[] })[] };
   };
 
   const utterances = json.results?.utterances;
@@ -104,5 +112,10 @@ export async function transcribeWithDeepgram(
     transcript: u.transcript.trim(),
     start: u.start,
     end: u.end,
+    words: (u.words ?? []).map((w) => ({
+      word: w.word,
+      start: w.start,
+      end: w.end,
+    })),
   }));
 }

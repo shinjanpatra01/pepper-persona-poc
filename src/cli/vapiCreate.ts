@@ -3,8 +3,9 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import { parseArgs } from "../lib/args.js";
 import { readJson, writeJson } from "../lib/io.js";
-import { AgentSpecSchema } from "../types.js";
+import { StoredAgentSpecSchema, TranscriptSchema } from "../types.js";
 import { createOrUpdateAgent } from "../vapi/createAgent.js";
+import { selectVoice, voiceDeliveryInstructions } from "../vapi/voiceMapping.js";
 
 /**
  * Stage 4 of the pipeline (PRD 2, "Vapi Adapter").
@@ -41,8 +42,8 @@ async function main() {
     process.exit(dir ? 0 : 1);
   }
 
-  const spec = await readJson(join(dir, "agent-spec.json"), AgentSpecSchema);
-  const systemPrompt = (await readFile(join(dir, "system-prompt.txt"), "utf8")).trim();
+  const spec = await readJson(join(dir, "agent-spec.json"), StoredAgentSpecSchema);
+  let systemPrompt = (await readFile(join(dir, "system-prompt.txt"), "utf8")).trim();
   const firstMessage = (await readFile(join(dir, "first-message.txt"), "utf8")).trim();
 
   const recordPath = join(dir, "vapi-assistant.json");
@@ -51,6 +52,26 @@ async function main() {
     existingAssistantId = (await readJson(recordPath, AssistantRecordSchema)).assistantId;
   } catch {
     // No prior assistant for this recording; we will create one.
+  }
+
+  // If the optional audio pass has run, the voice profile shapes the assistant
+  // twice: it picks the TTS voice, and it adds a delivery section to the prompt
+  // for the things TTS cannot control (phrasing, rhythm, register).
+  let voice;
+  if (spec.voice_profile) {
+    const transcript = await readJson(join(dir, "transcript.json"), TranscriptSchema);
+    const prosody = transcript.prosody?.agent;
+    if (prosody) {
+      voice = selectVoice(spec.voice_profile, prosody);
+      systemPrompt +=
+        "\n\n# Delivery\n" + voiceDeliveryInstructions(spec.voice_profile, prosody);
+      console.log(
+        `Voice profile found: ${voice.provider}/${voice.voiceId} @ ${voice.speed}x`
+      );
+      for (const reason of voice.rationale) console.log(`  - ${reason}`);
+    }
+  } else {
+    console.log("No voice_profile in the spec; leaving the Vapi default voice.");
   }
 
   const label = basename(resolve(dir));
@@ -66,6 +87,7 @@ async function main() {
     firstMessage,
     label,
     existingAssistantId,
+    voice,
   });
 
   await writeJson(recordPath, {

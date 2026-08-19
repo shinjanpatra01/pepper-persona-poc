@@ -12,10 +12,30 @@ export const TranscriptTurnSchema = z.object({
   end: z.number().optional(),
 });
 
+/**
+ * Objective timing measurements taken from the audio (see
+ * transcription/prosody.ts). Optional so that hand-written or hand-corrected
+ * transcripts remain valid.
+ */
+export const ProsodySchema = z.object({
+  words_per_minute: z.number(),
+  speaking_seconds: z.number(),
+  talk_ratio: z.number(),
+  mean_intra_turn_pause: z.number(),
+  long_pauses_per_100_words: z.number(),
+  mean_response_latency: z.number(),
+  mean_turn_duration: z.number(),
+  segments: z.array(z.object({ start: z.number(), end: z.number() })),
+});
+
 export const TranscriptSchema = z.object({
   source: z.string(), // URL or filename - reproducibility, PRD 3.1
   notes: z.string().optional(),
   turns: z.array(TranscriptTurnSchema),
+  /** Measured separately for each role; agent is the one we build a voice from. */
+  prosody: z
+    .object({ agent: ProsodySchema, customer: ProsodySchema })
+    .optional(),
 });
 
 export type TranscriptTurn = z.infer<typeof TranscriptTurnSchema>;
@@ -101,3 +121,55 @@ export const AgentSpecSchema = z.object({
 });
 
 export type AgentSpec = z.infer<typeof AgentSpecSchema>;
+
+/* ------------------------------------------------------------------ *
+ * VOICE PROFILE  (optional audio-derived layer)
+ *
+ * PRD 5 lists intonation, pitch and emphasis as limitations of a
+ * transcript-only pipeline, and offers as an optional experiment the
+ * comparison of transcript-only extraction against audio + transcript.
+ * This schema is that experiment: it is produced by listening to the
+ * agent's audio, and it is kept SEPARATE from AgentSpec so the two can be
+ * generated and evaluated independently.
+ * ------------------------------------------------------------------ */
+
+export const VoiceProfileSchema = z.object({
+  perceived_gender: z.enum(["male", "female", "ambiguous"]),
+  /** Human-readable, e.g. "British English, southern, mildly estuary". */
+  accent: z.string(),
+  /** Constrained tag used to pick a TTS voice; free text cannot be mapped. */
+  accent_code: z.enum([
+    "en-US",
+    "en-GB",
+    "en-IN",
+    "en-AU",
+    "en-IE",
+    "en-CA",
+    "en-ZA",
+    "other",
+  ]),
+  pitch: z.enum(["low", "medium", "high"]),
+  timbre: z.string(),
+  perceived_pace: z.enum(["slow", "moderate", "fast"]),
+  pause_style: z.string(),
+  emotional_register: z.string(),
+  /** Delivery habits a TTS engine can plausibly approximate. */
+  delivery_notes: z.array(z.string()),
+  /** Things audible in the audio that the transcript alone could not reveal. */
+  audio_only_observations: z.array(z.string()),
+  confidence: z.enum(["low", "medium", "high"]),
+});
+
+export type VoiceProfile = z.infer<typeof VoiceProfileSchema>;
+
+/**
+ * What actually gets written to agent-spec.json: the text-derived spec plus,
+ * when the audio pass has been run, the voice profile. AgentSpecSchema itself
+ * stays untouched so the strict JSON schema we send the LLM never carries an
+ * optional field (providers require every property to be required).
+ */
+export const StoredAgentSpecSchema = AgentSpecSchema.extend({
+  voice_profile: VoiceProfileSchema.optional(),
+});
+
+export type StoredAgentSpec = z.infer<typeof StoredAgentSpecSchema>;

@@ -3,8 +3,12 @@
   "notes": "LIVE COLD CALL - Batman, https://www.youtube.com/watch?v=jlaetKa-Pt8",
   "turns": [
     {
+      "speaker": "agent",
+      "text": "Hello."
+    },
+    {
       "speaker": "customer",
-      "text": "Hello. Speaking."
+      "text": "Speaking."
     },
     {
       "speaker": "agent",
@@ -32,15 +36,23 @@
     },
     {
       "speaker": "agent",
-      "text": "This would be sales training, actually. B to b and b c."
+      "text": "This would be sales training, actually. B to b and b c. But that might not be irrelevant at all then?"
     },
     {
       "speaker": "customer",
-      "text": "But that might not be irrelevant at all then? Or Well, I was gonna say I don't know what you what what I don't know what you're talking about with LinkedIn. But"
+      "text": "Or Well, I was gonna say I don't know what you what what I don't know what you're talking about with LinkedIn. But"
     },
     {
       "speaker": "agent",
-      "text": "No. Scrolling on LinkedIn. They're scrolling on LinkedIn instead of cold calling. That's what I meant. Okay. So so basically, it's either that or perhaps they pick up the phone, they make the calls, but they're just not really generating enough qualified pipeline. Again, in in a nutshell, I'm a sales trainer, but you might tell me now, you know, your salespeople are so good they can even beat a jet to holiday, and then I can let you get on with your Monday."
+      "text": "No. Scrolling on LinkedIn. They're scrolling on LinkedIn instead of cold calling. That's what I meant."
+    },
+    {
+      "speaker": "customer",
+      "text": "Okay."
+    },
+    {
+      "speaker": "agent",
+      "text": "So so basically, it's either that or perhaps they pick up the phone, they make the calls, but they're just not really generating enough qualified pipeline. Again, in in a nutshell, I'm a sales trainer, but you might tell me now, you know, your salespeople are so good they can even beat a jet to holiday, and then I can let you get on with your Monday."
     },
     {
       "speaker": "customer",
@@ -88,11 +100,11 @@
     },
     {
       "speaker": "agent",
-      "text": "For certain addresses, no. I don't I don't think we can go that well. I don't think we can do that well. It's got it's gotta be still tied to a specific person. It could've been something that"
+      "text": "For certain addresses, no. I don't I don't think we can go that well. I don't think we can do that well. It's got it's gotta be still tied to a specific person. It could've been something that Yep."
     },
     {
       "speaker": "customer",
-      "text": "Yep. Yeah. That's that's really my problem. So no, mate. Look. I don't think you I don't think you can help, but I do appreciate the call, and thanks for letting me know. Good luck."
+      "text": "Yeah. That's that's really my problem. So no, mate. Look. I don't think you I don't think you can help, but I do appreciate the call, and thanks for letting me know. Good luck."
     },
     {
       "speaker": "agent",
@@ -124,11 +136,11 @@
     },
     {
       "speaker": "customer",
-      "text": "I mean, I think that, like, that should be one of the core competencies of improving our team internally anyway. So if I haven't got the right people to do it, then then"
+      "text": "I mean, I think that, like, that should be one of the core competencies of improving our team internally anyway. So if I haven't got the right people to do it, then then Yeah."
     },
     {
       "speaker": "agent",
-      "text": "Yeah. But if you're then okay. Okay. So you maybe you're telling me that you're gonna always hire internally, you wouldn't consider at all, an external person to avoid this."
+      "text": "But if you're then okay. Okay. So you maybe you're telling me that you're gonna always hire internally, you wouldn't consider at all, an external person to avoid this."
     },
     {
       "speaker": "customer",
@@ -148,15 +160,7 @@
     },
     {
       "speaker": "customer",
-      "text": "No."
-    },
-    {
-      "speaker": "agent",
-      "text": "Wow."
-    },
-    {
-      "speaker": "customer",
-      "text": "No. I haven't."
+      "text": "No. Wow. No. I haven't."
     },
     {
       "speaker": "agent",
@@ -200,19 +204,231 @@
     },
     {
       "speaker": "agent",
-      "text": "Perfect. So I look forward to speaking to you in a couple of weeks."
+      "text": "Perfect. So I look forward to speaking to you in a couple of weeks. Okay. Excellent. Alright. Thanks, mate. Have a good day. Bye."
     },
     {
       "speaker": "customer",
-      "text": "Okay. Excellent. Alright. Thanks, mate. Have a good day. Bye."
-    },
-    {
-      "speaker": "agent",
-      "text": "Cheers. Bye bye."
-    },
-    {
-      "speaker": "customer",
-      "text": "Bye bye."
+      "text": "Cheers. Bye bye. Bye bye."
     }
-  ]
+  ],
+  "prosody": {
+    "agent": {
+      "words_per_minute": 226.2,
+      "speaking_seconds": 201.6,
+      "talk_ratio": 0.6,
+      "mean_intra_turn_pause": 0.008,
+      "long_pauses_per_100_words": 0.3,
+      "mean_response_latency": 0.55,
+      "mean_turn_duration": 6.7,
+      "segments": [
+        {
+          "start": 0.08,
+          "end": 6.8
+        },
+        {
+          "start": 8.08,
+          "end": 12.24
+        },
+        {
+          "start": 14.97,
+          "end": 25.29
+        },
+        {
+          "start": 41.83,
+          "end": 46.31
+        },
+        {
+          "start": 46.95,
+          "end": 52.87
+        },
+        {
+          "start": 53.37,
+          "end": 58.25
+        },
+        {
+          "start": 58.49,
+          "end": 65.21
+        },
+        {
+          "start": 69.34,
+          "end": 70.06
+        },
+        {
+          "start": 70.55,
+          "end": 72.55
+        },
+        {
+          "start": 92.4,
+          "end": 101.36
+        },
+        {
+          "start": 101.6,
+          "end": 109.72
+        },
+        {
+          "start": 110.12,
+          "end": 114.28
+        },
+        {
+          "start": 114.6,
+          "end": 122.28
+        },
+        {
+          "start": 122.92,
+          "end": 123.88
+        },
+        {
+          "start": 123.88,
+          "end": 128.04
+        },
+        {
+          "start": 128.35,
+          "end": 149.49
+        },
+        {
+          "start": 159.01,
+          "end": 163.94
+        },
+        {
+          "start": 164.66,
+          "end": 174.5
+        },
+        {
+          "start": 175.09,
+          "end": 181.97
+        },
+        {
+          "start": 204.02,
+          "end": 208.9
+        },
+        {
+          "start": 209.06,
+          "end": 210.34
+        },
+        {
+          "start": 222.25,
+          "end": 229.21
+        },
+        {
+          "start": 240.72,
+          "end": 244.16
+        },
+        {
+          "start": 244.93,
+          "end": 250.45
+        },
+        {
+          "start": 253.97,
+          "end": 272.97
+        },
+        {
+          "start": 282.02,
+          "end": 296.56
+        },
+        {
+          "start": 302.13,
+          "end": 308.29
+        },
+        {
+          "start": 308.53,
+          "end": 312.53
+        },
+        {
+          "start": 322.04,
+          "end": 326.76
+        },
+        {
+          "start": 329.9,
+          "end": 338.3
+        }
+      ]
+    },
+    "customer": {
+      "words_per_minute": 217.5,
+      "speaking_seconds": 102.6,
+      "talk_ratio": 0.3,
+      "mean_intra_turn_pause": 0.013,
+      "long_pauses_per_100_words": 0.8,
+      "mean_response_latency": 1.17,
+      "mean_turn_duration": 5.4,
+      "segments": [
+        {
+          "start": 12.89,
+          "end": 14.81
+        },
+        {
+          "start": 25.93,
+          "end": 33.29
+        },
+        {
+          "start": 33.69,
+          "end": 40.57
+        },
+        {
+          "start": 66.86,
+          "end": 68.63
+        },
+        {
+          "start": 75.51,
+          "end": 83.46
+        },
+        {
+          "start": 83.7,
+          "end": 91.62
+        },
+        {
+          "start": 149.73,
+          "end": 152.05
+        },
+        {
+          "start": 152.05,
+          "end": 158.77
+        },
+        {
+          "start": 183.01,
+          "end": 188.06
+        },
+        {
+          "start": 188.86,
+          "end": 189.58
+        },
+        {
+          "start": 189.98,
+          "end": 194.3
+        },
+        {
+          "start": 194.54,
+          "end": 198.38
+        },
+        {
+          "start": 198.86,
+          "end": 204.02
+        },
+        {
+          "start": 210.97,
+          "end": 221.37
+        },
+        {
+          "start": 230.08,
+          "end": 240.72
+        },
+        {
+          "start": 252.93,
+          "end": 253.73
+        },
+        {
+          "start": 274.58,
+          "end": 281.38
+        },
+        {
+          "start": 297.6,
+          "end": 300.64
+        },
+        {
+          "start": 312.77,
+          "end": 321.81
+        }
+      ]
+    }
+  }
 }

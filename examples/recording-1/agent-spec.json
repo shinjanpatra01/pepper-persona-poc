@@ -96,5 +96,28 @@
       "Agent relies heavily on phone persistence and pattern interrupts rather than formal scripts."
     ],
     "confidence": "high"
+  },
+  "voice_profile": {
+    "perceived_gender": "male",
+    "accent": "Irish, likely Dublin",
+    "accent_code": "en-IE",
+    "pitch": "medium",
+    "timbre": "resonant and clear, with a slightly bright quality",
+    "perceived_pace": "fast",
+    "pause_style": "The speaker uses very short pauses between words, contributing to a continuous and flowing delivery. Deliberate pauses are infrequent, indicating a rapid and sustained speaking rhythm.",
+    "emotional_register": "Engaging, confident, and persuasive, conveying a professional yet enthusiastic demeanor.",
+    "delivery_notes": [
+      "Uses rising intonation on questions.",
+      "Pronounces 'th' sounds as 'd' or 't' in some instances (e.g., 'that' sounds like 'dat').",
+      "Emphasizes key words for clarity and impact.",
+      "Maintains a consistent, rapid speaking pace throughout."
+    ],
+    "audio_only_observations": [
+      "The specific pronunciation of 'th' sounds, characteristic of an Irish accent.",
+      "The energetic and engaging tone of voice.",
+      "The clear and resonant quality of the voice.",
+      "A slight upward inflection at the end of some declarative sentences, making them sound inviting or seeking agreement."
+    ],
+    "confidence": "high"
   }
 }

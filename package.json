@@ -9,7 +9,9 @@
     "prompt": "tsx src/cli/prompt.ts",
     "generate-agent": "tsx src/cli/generateAgent.ts",
     "vapi:create": "tsx src/cli/vapiCreate.ts",
-    "vapi:call": "tsx src/cli/vapiCall.ts"
+    "vapi:call": "tsx src/cli/vapiCall.ts",
+    "analyze-voice": "tsx src/cli/analyzeVoice.ts",
+    "ui": "tsx src/server/index.ts"
   },
   "repository": {
     "type": "git",

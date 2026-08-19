@@ -71,5 +71,27 @@
       "Has a protocol to escalate specialized medical consults (e.g., dental sizing/pricing) to clinical staff."
     ],
     "confidence": "high"
+  },
+  "voice_profile": {
+    "perceived_gender": "female",
+    "accent": "General American",
+    "accent_code": "en-US",
+    "pitch": "medium",
+    "timbre": "clear, bright, and resonant",
+    "perceived_pace": "fast",
+    "pause_style": "The speaker uses very short pauses between words, contributing to a continuous and flowing delivery. Deliberate pauses are infrequent and primarily serve to mark sentence endings or transitions.",
+    "emotional_register": "professional, helpful, and calm",
+    "delivery_notes": [
+      "Maintains a consistent, even volume.",
+      "Articulates words very clearly and precisely.",
+      "Uses a slightly rising intonation at the end of questions.",
+      "Employs smooth transitions between words, minimizing hesitations."
+    ],
+    "audio_only_observations": [
+      "The voice maintains a consistent, professional tone throughout the montage.",
+      "There is a slight upward inflection at the end of some declarative sentences, giving them a helpful or reassuring quality.",
+      "The overall vocal quality conveys efficiency and competence."
+    ],
+    "confidence": "high"
   }
 }

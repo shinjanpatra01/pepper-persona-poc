@@ -7,25 +7,33 @@ import type { Transcript, TranscriptTurn } from "../types.js";
  *
  * Deepgram separates voices by how they SOUND. When two speakers have similar
  * voices on compressed phone audio it mislabels them, or collapses both into
- * one speaker entirely. On our sales recording it assigned the whole first 25
- * seconds - question and answer alike - to a single speaker.
+ * one speaker entirely - on our sales recording it assigned the whole first 25
+ * seconds, question and answer alike, to a single speaker. An LLM has the
+ * signal the acoustic model lacks: it knows "Hello, speaking" is the person who
+ * ANSWERED, and that a reply comes from whoever did not ask.
  *
- * An LLM has the signal the acoustic model lacks: it knows "Hello, speaking"
- * is the person who ANSWERED, and that the reply to a question comes from the
- * other party. So we hand it the diarised text and ask it to re-segment.
+ * WHY THIS ASKS FOR WORD RANGES RATHER THAN TEXT
+ * The obvious implementation - "here is the transcript, return it relabelled" -
+ * lets the model quietly rewrite words, and a rewritten transcript silently
+ * corrupts every downstream persona claim, including the verbatim quotes in
+ * evidence.signature_phrases. An earlier version of this file did exactly that
+ * and had to verify the output word by word; weaker models failed the check
+ * routinely (gemini-2.5-flash turned one "well" into "okay") and lost the whole
+ * repair over a single token.
  *
- * The obvious risk is the model quietly rewriting words instead of just
- * relabelling them, which would corrupt every downstream persona claim. So the
- * repair is verified: we compare the word sequence before and after, and if it
- * drifted we reject the repair and keep the original transcript. The repair
- * can only ever change WHO said something, never WHAT was said.
+ * So the model never handles the text. It sees numbered words and returns
+ * spans - "words 1 to 4 are the customer, 5 to 31 are the agent". We rebuild
+ * the turns from OUR word array. Altering the transcript is not something the
+ * model is trusted not to do; it is something it cannot do.
  */
 
-const RepairedSchema = z.object({
-  turns: z.array(
+const SpansSchema = z.object({
+  spans: z.array(
     z.object({
       speaker: z.enum(["agent", "customer"]),
-      text: z.string(),
+      /** 1-based, inclusive, into the numbered word list. */
+      start: z.number(),
+      end: z.number(),
     })
   ),
 });
@@ -33,14 +41,16 @@ const RepairedSchema = z.object({
 const SYSTEM_PROMPT = `
 You are correcting the speaker labels on a phone call transcript.
 
-The transcript was produced by an automatic diarisation system that separates
-voices acoustically. It is unreliable: it merges speakers when their voices are
-similar, and it frequently attaches a short interjection to the wrong person.
-Your advantage over it is that you understand conversation.
+The words below are numbered in the order they were spoken. They were split
+into speakers by an automatic system that separates voices acoustically, and
+that system is unreliable: it merges speakers whose voices are similar and
+frequently attaches short interjections to the wrong person. Your advantage
+over it is that you understand conversation.
 
-Re-segment the text into alternating turns between exactly two people:
-  - "agent": the professional who is running the call. On an outbound call this
-    is whoever pitches, qualifies, handles objections and asks for the meeting.
+Divide the whole word sequence into consecutive spans, each belonging to one of
+exactly two people:
+  - "agent": the professional running the call. On an outbound call this is
+    whoever pitches, qualifies, handles objections and asks for the meeting.
     On an inbound call this is whoever answers on behalf of the business.
   - "customer": the other party.
 
@@ -48,22 +58,61 @@ Use conversational logic:
   - "Hello?" or "<name> speaking" is the person who ANSWERED the phone.
   - The answer to a question comes from the other speaker than the question.
   - Back-channels ("yeah", "okay", "sure", "go on") usually belong to the
-    listener, not to whoever is mid-sentence around them.
+    listener, not to whoever is speaking around them.
   - A speaker rarely answers their own question.
 
-ABSOLUTE CONSTRAINT
-Reproduce the words EXACTLY as given, in the same order. Do not correct
-grammar, do not remove filler or stutters, do not add or drop a single word.
-You are only allowed to change where turn boundaries fall and which speaker
-each turn is attributed to. The words are evidence and must survive intact.
+RULES FOR THE SPANS
+  - The first span must start at word 1.
+  - Each span must start at the word immediately after the previous span ends.
+  - The last span must end at the final word.
+  - Consecutive spans must alternate speakers.
+Do not return the words themselves - only the numbers and the speaker.
 `.trim();
 
-/** Comparable word sequence: lowercase, letters and digits only. */
-function wordSignature(turns: { text: string }[]): string[] {
-  return turns
-    .flatMap((t) => t.text.split(/\s+/))
-    .map((w) => w.toLowerCase().replace(/[^a-z0-9']/g, ""))
-    .filter(Boolean);
+/** Split turns into a flat word array while remembering the current labels. */
+function flatten(turns: TranscriptTurn[]): { word: string; speaker: string }[] {
+  return turns.flatMap((turn) =>
+    turn.text
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => ({ word, speaker: turn.speaker }))
+  );
+}
+
+/**
+ * Force the model's spans into a valid cover of the word list.
+ *
+ * Because the words themselves are ours, a sloppy span list degrades boundary
+ * accuracy but can never lose or alter text. So we repair the spans rather
+ * than rejecting the whole pass: gaps are absorbed by the preceding span,
+ * overlaps are trimmed, out-of-range values clamped.
+ */
+function normaliseSpans(
+  spans: { speaker: "agent" | "customer"; start: number; end: number }[],
+  wordCount: number
+): { speaker: "agent" | "customer"; start: number; end: number }[] {
+  const sorted = [...spans].sort((a, b) => a.start - b.start);
+  const result: typeof sorted = [];
+  let cursor = 1;
+
+  for (const span of sorted) {
+    const start = Math.max(cursor, Math.min(span.start, wordCount));
+    const end = Math.max(start, Math.min(span.end, wordCount));
+    if (start > wordCount) break;
+
+    const previous = result[result.length - 1];
+    if (previous && previous.speaker === span.speaker) {
+      previous.end = end; // merge rather than emit two spans in a row
+    } else {
+      result.push({ speaker: span.speaker, start, end });
+    }
+    cursor = end + 1;
+  }
+
+  if (result.length === 0) return [];
+  // Any trailing words the model forgot about join the final span.
+  result[result.length - 1]!.end = wordCount;
+  return result;
 }
 
 export interface RepairResult {
@@ -75,58 +124,80 @@ export interface RepairResult {
 export async function repairSpeakers(
   transcript: Transcript
 ): Promise<RepairResult> {
-  const numbered = transcript.turns
-    .map((t, i) => `${i + 1}. [${t.speaker}] ${t.text}`)
+  const words = flatten(transcript.turns);
+
+  if (words.length === 0) {
+    return { transcript, applied: false, note: "Repair skipped: empty transcript." };
+  }
+
+  // 12 numbered words per line keeps the prompt readable for the model and
+  // keeps the indices visually close to the words they label.
+  const lines: string[] = [];
+  for (let i = 0; i < words.length; i += 12) {
+    lines.push(
+      words
+        .slice(i, i + 12)
+        .map((w, j) => `${i + j + 1}:${w.word}`)
+        .join(" ")
+    );
+  }
+
+  const currentLabels = transcript.turns
+    .map((t, i) => `  turn ${i + 1}: ${t.speaker}`)
     .join("\n");
 
-  const repaired = await completeJson({
-    schema: RepairedSchema,
-    schemaName: "repaired_transcript",
+  const { spans } = await completeJson({
+    schema: SpansSchema,
+    schemaName: "speaker_spans",
     temperature: 0,
     system: SYSTEM_PROMPT,
     user:
-      `Diarisation output for the call (labels may be wrong):\n\n${numbered}\n\n` +
-      `Return the corrected turns.`,
+      `The call has ${words.length} words.\n\n` +
+      `Current (unreliable) labelling, for reference only:\n${currentLabels}\n\n` +
+      `NUMBERED WORDS\n${lines.join("\n")}\n\n` +
+      `Return spans covering words 1 to ${words.length}.`,
   });
 
-  // Verification: the words must be identical, only the labels may move.
-  const before = wordSignature(transcript.turns);
-  const after = wordSignature(repaired.turns);
-
-  if (before.length !== after.length) {
+  const normalised = normaliseSpans(spans, words.length);
+  if (normalised.length < 2) {
     return {
       transcript,
       applied: false,
       note:
-        `Repair REJECTED: the model returned ${after.length} words but the ` +
-        `original had ${before.length}. Keeping the original diarisation.`,
+        "Repair REJECTED: the model produced fewer than two speaker spans, " +
+        "which cannot be a two-party call. Keeping the original diarisation.",
     };
   }
 
-  const firstDrift = before.findIndex((w, i) => w !== after[i]);
-  if (firstDrift !== -1) {
-    return {
-      transcript,
-      applied: false,
-      note:
-        `Repair REJECTED: wording changed at word ${firstDrift + 1} ` +
-        `("${before[firstDrift]}" became "${after[firstDrift]}"). ` +
-        `Keeping the original diarisation.`,
-    };
-  }
-
-  const changed = repaired.turns.length !== transcript.turns.length;
-  const turns: TranscriptTurn[] = repaired.turns.map((t) => ({
-    speaker: t.speaker,
-    text: t.text,
+  const turns: TranscriptTurn[] = normalised.map((span) => ({
+    speaker: span.speaker,
+    text: words
+      .slice(span.start - 1, span.end)
+      .map((w) => w.word)
+      .join(" "),
   }));
+
+  // Text integrity is guaranteed by construction, but assert it anyway: this
+  // is the invariant the whole design exists to protect.
+  const before = words.map((w) => w.word).join(" ");
+  const after = turns.map((t) => t.text).join(" ");
+  if (before !== after) {
+    throw new Error(
+      "Internal error: span reconstruction changed the transcript text."
+    );
+  }
+
+  const moved = words.filter((w, i) => {
+    const span = normalised.find((s) => i + 1 >= s.start && i + 1 <= s.end);
+    return span && span.speaker !== w.speaker;
+  }).length;
 
   return {
     transcript: { ...transcript, turns },
     applied: true,
     note:
-      `Repair applied and verified: every word preserved. ` +
-      `Turn count ${transcript.turns.length} -> ${repaired.turns.length}` +
-      (changed ? " (re-segmented)." : " (labels only)."),
+      `Repair applied: ${transcript.turns.length} -> ${turns.length} turns, ` +
+      `${moved} of ${words.length} words reassigned. Text preserved by ` +
+      `construction (the model never sees or returns the words).`,
   };
 }

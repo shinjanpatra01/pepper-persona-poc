@@ -1,5 +1,6 @@
 import type { Transcript, TranscriptTurn } from "../types.js";
 import { transcribeWithDeepgram, type DeepgramUtterance } from "./deepgram.js";
+import { measureProsody } from "./prosody.js";
 import { decideAgentSpeaker, type SpeakerDecision } from "./speakers.js";
 
 export interface TranscribeOptions {
@@ -62,11 +63,24 @@ export async function buildTranscript(
   const overridden = options.agentSpeaker !== undefined;
   const agentSpeaker = options.agentSpeaker ?? decision.agentSpeaker;
 
+  // Prosody is measured here, against the raw Deepgram utterances, because the
+  // optional LLM repair pass later re-segments the text and drops timings. The
+  // numbers therefore reflect the ACOUSTIC speaker assignment; if the repair
+  // pass swaps a few boundaries the effect on aggregate rate and pause
+  // statistics is negligible, but it is a real caveat worth documenting.
+  const customerSpeakers = [
+    ...new Set(utterances.map((u) => u.speaker)),
+  ].filter((s) => s !== agentSpeaker);
+
   return {
     transcript: {
       source: options.source,
       notes: options.notes,
       turns: toTurns(utterances, agentSpeaker),
+      prosody: {
+        agent: measureProsody(utterances, agentSpeaker),
+        customer: measureProsody(utterances, customerSpeakers[0] ?? -1),
+      },
     },
     decision,
     overridden,
