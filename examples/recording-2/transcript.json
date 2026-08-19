@@ -58,5 +58,125 @@
       "speaker": "customer",
       "text": "Okay."
     }
-  ]
+  ],
+  "prosody": {
+    "agent": {
+      "words_per_minute": 187.9,
+      "speaking_seconds": 69,
+      "talk_ratio": 0.75,
+      "mean_intra_turn_pause": 0.005,
+      "long_pauses_per_100_words": 0.5,
+      "mean_response_latency": 1.07,
+      "mean_turn_duration": 4.1,
+      "segments": [
+        {
+          "start": 1.12,
+          "end": 9.12
+        },
+        {
+          "start": 11.6,
+          "end": 12.08
+        },
+        {
+          "start": 12.43,
+          "end": 13.79
+        },
+        {
+          "start": 13.88,
+          "end": 16.84
+        },
+        {
+          "start": 16.84,
+          "end": 19.47
+        },
+        {
+          "start": 19.56,
+          "end": 20.84
+        },
+        {
+          "start": 23.88,
+          "end": 27.15
+        },
+        {
+          "start": 27.63,
+          "end": 36.19
+        },
+        {
+          "start": 39.81,
+          "end": 41.89
+        },
+        {
+          "start": 41.97,
+          "end": 47.73
+        },
+        {
+          "start": 51.57,
+          "end": 56.82
+        },
+        {
+          "start": 57.62,
+          "end": 60.74
+        },
+        {
+          "start": 60.82,
+          "end": 63.86
+        },
+        {
+          "start": 66.42,
+          "end": 77.19
+        },
+        {
+          "start": 81.02,
+          "end": 83.18
+        },
+        {
+          "start": 83.26,
+          "end": 86.14
+        },
+        {
+          "start": 86.14,
+          "end": 91.5
+        }
+      ]
+    },
+    "customer": {
+      "words_per_minute": 173.6,
+      "speaking_seconds": 9.7,
+      "talk_ratio": 0.11,
+      "mean_intra_turn_pause": 0,
+      "long_pauses_per_100_words": 0,
+      "mean_response_latency": 0.66,
+      "mean_turn_duration": 1.4,
+      "segments": [
+        {
+          "start": 9.68,
+          "end": 10.96
+        },
+        {
+          "start": 21.08,
+          "end": 22.91
+        },
+        {
+          "start": 36.75,
+          "end": 38.59
+        },
+        {
+          "start": 48.45,
+          "end": 50.36
+        },
+        {
+          "start": 64.34,
+          "end": 65.22
+        },
+        {
+          "start": 78.32,
+          "end": 79.84
+        },
+        {
+          "start": 92.46,
+          "end": 92.86
+        }
+      ]
+    }
+  }
 }
