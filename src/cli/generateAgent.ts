@@ -55,6 +55,7 @@ async function main() {
   const specPath = join(outDir, "agent-spec.json");
   const promptPath = join(outDir, "system-prompt.txt");
   const firstPath = join(outDir, "first-message.txt");
+  const idlePath = join(outDir, "idle-messages.json");
 
   /* -------- Stage 1: transcript -------- */
   let transcript;
@@ -96,13 +97,15 @@ async function main() {
 
   /* -------- Stage 3: system prompt -------- */
   console.log("[3/3] Generating the system prompt...");
-  const { systemPrompt, firstMessage, warnings: promptWarnings } =
+  const { systemPrompt, firstMessage, idleMessages, warnings: promptWarnings } =
     await generatePrompt(spec);
   await writeText(promptPath, systemPrompt + "\n");
   await writeText(firstPath, firstMessage + "\n");
+  await writeJson(idlePath, idleMessages);
   console.log(`      first message: "${firstMessage}"`);
   console.log(`      -> ${promptPath}`);
   console.log(`      -> ${firstPath}`);
+  console.log(`      -> ${idlePath}`);
 
   const allWarnings = [...specWarnings, ...promptWarnings];
   if (allWarnings.length > 0) {

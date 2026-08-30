@@ -5,7 +5,12 @@ import { parseArgs } from "../lib/args.js";
 import { readJson, writeJson } from "../lib/io.js";
 import { StoredAgentSpecSchema, TranscriptSchema } from "../types.js";
 import { createOrUpdateAgent } from "../vapi/createAgent.js";
+import {
+  languageInstructions,
+  selectTranscriber,
+} from "../vapi/languageRouting.js";
 import { selectVoice, voiceDeliveryInstructions } from "../vapi/voiceMapping.js";
+import { VoiceOverridesSchema } from "../vapi/voiceOverrides.js";
 
 /**
  * Stage 4 of the pipeline (PRD 2, "Vapi Adapter").
@@ -46,6 +51,14 @@ async function main() {
   let systemPrompt = (await readFile(join(dir, "system-prompt.txt"), "utf8")).trim();
   const firstMessage = (await readFile(join(dir, "first-message.txt"), "utf8")).trim();
 
+  // Written by the prompt stage. Missing on personas generated before the
+  // silence handling existed, in which case Vapi keeps its own behaviour and
+  // the operator is told to re-run the stage.
+  const idleMessages =
+    (await readJson(join(dir, "idle-messages.json"), z.array(z.string())).catch(
+      () => null
+    )) ?? undefined;
+
   const recordPath = join(dir, "vapi-assistant.json");
   let existingAssistantId: string | undefined;
   try {
@@ -57,12 +70,65 @@ async function main() {
   // If the optional audio pass has run, the voice profile shapes the assistant
   // twice: it picks the TTS voice, and it adds a delivery section to the prompt
   // for the things TTS cannot control (phrasing, rhythm, register).
+  const transcript = await readJson(join(dir, "transcript.json"), TranscriptSchema);
+
+  // The language the recording was detected as drives three things at once:
+  // the STT the agent listens with, the TTS locale it answers in, and the
+  // language rules in its prompt. Missing on transcripts made before the
+  // detection layer existed, in which case everything below is a no-op and the
+  // agent keeps Vapi's English defaults.
+  let transcriber;
+  const detected = transcript.language;
+  if (detected) {
+    console.log(
+      `Recording language: ${detected.label} (${detected.language}), ` +
+        `${detected.confidence} confidence` +
+        (detected.code_mixed ? ", code-mixed with English" : "")
+    );
+    if (detected.language !== "en") {
+      transcriber = selectTranscriber(detected);
+      for (const reason of transcriber.rationale) console.log(`  - ${reason}`);
+
+      const instructions = languageInstructions(detected);
+      if (instructions) systemPrompt += "\n\n# Language\n" + instructions;
+    } else {
+      console.log("  - English; leaving Vapi's default transcriber in place.");
+    }
+  } else {
+    console.log(
+      "No language profile in the transcript (made before the detection layer). " +
+        "Re-run the transcribe stage to route STT and TTS by language."
+    );
+  }
+
   let voice;
+  let voiceOverrides;
   if (spec.voice_profile) {
-    const transcript = await readJson(join(dir, "transcript.json"), TranscriptSchema);
     const prosody = transcript.prosody?.agent;
     if (prosody) {
-      voice = selectVoice(spec.voice_profile, prosody);
+      voice = selectVoice(spec.voice_profile, prosody, detected);
+
+      /*
+       * Console edits win over the derived voice.
+       *
+       * The derivation is a starting point, not a fact: the speed divides
+       * words-per-minute by a tuning constant, and the voice itself is one
+       * UUID picked per language and gender out of a catalogue of hundreds.
+       * Someone who listened to a call and changed it knows more than the
+       * arithmetic does, and having a re-push silently revert that is how a
+       * tuning knob becomes useless.
+       */
+      voiceOverrides =
+        (await readJson(join(dir, "voice-overrides.json"), VoiceOverridesSchema).catch(
+          () => null
+        )) ?? undefined;
+      if (voiceOverrides && Object.keys(voiceOverrides).length) {
+        console.log(
+          `  - Console overrides applied: ${Object.entries(voiceOverrides)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(", ")}`
+        );
+      }
       systemPrompt +=
         "\n\n# Delivery\n" + voiceDeliveryInstructions(spec.voice_profile, prosody);
       console.log(
@@ -74,7 +140,13 @@ async function main() {
     console.log("No voice_profile in the spec; leaving the Vapi default voice.");
   }
 
-  const label = basename(resolve(dir));
+  // Prefer the persona's display name over the folder name, so pushing an
+  // update does not silently undo a rename.
+  const meta = await readJson(
+    join(dir, "persona.json"),
+    z.object({ name: z.string() }).loose()
+  ).catch(() => null);
+  const label = meta?.name ?? basename(resolve(dir));
   console.log(
     existingAssistantId
       ? `Updating Vapi assistant ${existingAssistantId}...`
@@ -87,7 +159,10 @@ async function main() {
     firstMessage,
     label,
     existingAssistantId,
+    idleMessages,
     voice,
+    voiceOverrides,
+    transcriber,
   });
 
   await writeJson(recordPath, {
@@ -100,6 +175,14 @@ async function main() {
   console.log(`\n${created ? "Created" : "Updated"} "${assistant.name}"`);
   console.log(`  assistant id : ${assistant.id}`);
   console.log(`  first message: "${firstMessage}"`);
+  if (idleMessages) {
+    console.log(`  idle lines   : ${idleMessages.map((m) => `"${m}"`).join(", ")}`);
+  } else {
+    console.log(
+      "  idle lines   : none (re-run the prompt stage to generate them; " +
+        "without them the agent has nothing of its own to say into a silence)"
+    );
+  }
   console.log(`  -> ${recordPath}`);
   console.log(
     `\nTest it in the browser: https://dashboard.vapi.ai/assistants/${assistant.id}` +

@@ -59,6 +59,12 @@ export function describeLlm(): string {
   return `${config.model} via ${config.baseURL}`;
 }
 
+/** The audio-reading model, which may differ from the text one. */
+export function describeAudioLlm(): string {
+  const { config } = getClient();
+  return `${optionalEnv("LLM_AUDIO_MODEL", config.model)} via ${config.baseURL}`;
+}
+
 /**
  * Retry transient provider failures with exponential backoff.
  *
@@ -184,6 +190,15 @@ export async function completeJson<T>(
  * part, which Gemini's compatibility endpoint accepts. Keeping it here rather
  * than in the voice module means the provider-swapping property of this file
  * still holds: any OpenAI-compatible endpoint with audio support works.
+ *
+ * The model is overridable separately from LLM_MODEL because "the provider
+ * supports audio" and "this model supports audio" are different claims. On
+ * Gemini they coincide - gemini-2.5-flash reads audio - so one name served
+ * both. On OpenAI they do not: gpt-4o is the right text model and rejects an
+ * input_audio block outright ("Content blocks are expected to be either text
+ * or image_url type"), while gpt-4o-audio-preview reads audio but is a worse
+ * writer. Forcing one name for both would mean degrading every text stage to
+ * keep the optional voice pass alive.
  */
 export async function completeAudioJson<T>(
   options: CompleteOptions & {
@@ -195,42 +210,89 @@ export async function completeAudioJson<T>(
 ): Promise<T> {
   const { client, config } = getClient();
   const jsonSchema = toStrictJsonSchema(options.schema);
+  const model = optionalEnv("LLM_AUDIO_MODEL", config.model);
 
-  const response = await withRetry(() =>
-    client.chat.completions.create({
-      model: config.model,
-      temperature: options.temperature ?? 0,
-      messages: [
-        { role: "system", content: options.system },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: options.user },
-            {
-              type: "input_audio",
-              input_audio: {
-                data: options.audioBase64,
-                format: options.audioFormat,
-              },
-            },
-          ],
-        },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: options.schemaName,
-          schema: jsonSchema,
-          strict: true,
+  const audioTurn = {
+    role: "user" as const,
+    content: [
+      { type: "text" as const, text: options.user },
+      {
+        type: "input_audio" as const,
+        input_audio: {
+          data: options.audioBase64,
+          format: options.audioFormat,
         },
       },
-    })
-  );
+    ],
+  };
+
+  /*
+   * Audio models are behind the text ones on structured output.
+   *
+   * gemini-2.5-flash honours a json_schema response_format; OpenAI's gpt-audio
+   * rejects it outright. Rather than pick one and lose the other, ask for the
+   * schema and fall back to describing it in the prompt when the provider says
+   * it cannot enforce it. Either way the reply is parsed and validated below,
+   * so the fallback is less reliable, not less safe.
+   */
+  const ask = (enforceSchema: boolean) =>
+    withRetry(() =>
+      client.chat.completions.create({
+        model,
+        temperature: options.temperature ?? 0,
+        messages: [
+          {
+            role: "system",
+            content: enforceSchema
+              ? options.system
+              : options.system +
+                "\n\nReply with a single JSON object and nothing else - no " +
+                "markdown fence, no commentary. It must match this JSON " +
+                "schema exactly:\n" +
+                JSON.stringify(jsonSchema),
+          },
+          audioTurn,
+        ],
+        ...(enforceSchema
+          ? {
+              response_format: {
+                type: "json_schema" as const,
+                json_schema: {
+                  name: options.schemaName,
+                  schema: jsonSchema,
+                  strict: true,
+                },
+              },
+            }
+          : {}),
+      })
+    );
+
+  let response;
+  try {
+    response = await ask(true);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/response_format|json_schema/i.test(message)) throw error;
+    response = await ask(false);
+  }
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("The model returned an empty response.");
 
-  const result = options.schema.safeParse(JSON.parse(content));
+  // Without an enforced schema the model sometimes wraps the object in a fence.
+  const json = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error(
+      `The voice model did not return JSON:\n${content.slice(0, 500)}`
+    );
+  }
+
+  const result = options.schema.safeParse(parsed);
   if (!result.success) {
     throw new Error(
       "The voice profile did not match the schema:\n" +

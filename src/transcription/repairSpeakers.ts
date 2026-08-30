@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { lookupLanguage } from "../audio/languages.js";
 import { completeJson } from "../lib/llm.js";
 import type { Transcript, TranscriptTurn } from "../types.js";
 
@@ -38,6 +39,36 @@ const SpansSchema = z.object({
   ),
 });
 
+/**
+ * Conversational cues that mark a listener rather than a speaker, per language.
+ *
+ * The English list was doing nothing on a Hindi call. "Hello?" and "yeah, okay,
+ * sure" simply do not appear in a Hindi property call, so every example the
+ * model had been given was inapplicable and it fell back on guessing - which is
+ * how an agent line ("मैं गौर सन्स डेवलपर्स की तरफ से बात कर रहा हूं") ended up
+ * labelled as the customer. Back-channels are the highest-signal words in the
+ * whole transcript for this task, and they are entirely language-specific.
+ */
+const BACK_CHANNELS: Record<string, { answering: string; listening: string }> = {
+  hi: {
+    answering: '"हैलो", "जी", "हाँ जी", "बोलिए" or "कौन बोल रहा है"',
+    listening: '"जी", "हाँ", "अच्छा", "ठीक है", "हम्म", "जी जी" or "बताइए"',
+  },
+  "hi-Latn": {
+    answering: '"hello", "ji", "haan ji", "boliye" or "kaun bol raha hai"',
+    listening: '"ji", "haan", "accha", "theek hai", "hmm" or "bataiye"',
+  },
+  bn: { answering: '"হ্যালো", "হ্যাঁ" or "কে বলছেন"', listening: '"হ্যাঁ", "আচ্ছা", "ঠিক আছে" or "হুম"' },
+  mr: { answering: '"हॅलो", "हो", "बोला" or "कोण बोलतंय"', listening: '"हो", "बरं", "ठीक आहे" or "हम्म"' },
+  gu: { answering: '"હેલો", "હા" or "કોણ બોલે છે"', listening: '"હા", "સારું", "ઠીક છે" or "હમ્મ"' },
+  pa: { answering: '"ਹੈਲੋ", "ਹਾਂ ਜੀ" or "ਕੌਣ ਬੋਲ ਰਿਹਾ"', listening: '"ਹਾਂ ਜੀ", "ਅੱਛਾ", "ਠੀਕ ਹੈ" or "ਹਮ"' },
+  ta: { answering: '"ஹலோ", "சொல்லுங்க" or "யாரு பேசுறீங்க"', listening: '"ஆமா", "சரி", "ஓகே" or "ம்ம்"' },
+  te: { answering: '"హలో", "చెప్పండి" or "ఎవరు మాట్లాడుతున్నారు"', listening: '"అవును", "సరే", "ఓకే" or "ఊ"' },
+  kn: { answering: '"ಹಲೋ", "ಹೇಳಿ" or "ಯಾರು ಮಾತಾಡ್ತಿದೀರಾ"', listening: '"ಹೌದು", "ಸರಿ", "ಓಕೆ" or "ಹೂಂ"' },
+  ml: { answering: '"ഹലോ", "പറയൂ" or "ആരാ സംസാരിക്കുന്നത്"', listening: '"അതെ", "ശരി", "ഓക്കെ" or "ഉം"' },
+  ur: { answering: '"ہیلو", "جی", "ہاں جی" or "کون بول رہا ہے"', listening: '"جی", "ہاں", "اچھا", "ٹھیک ہے" or "بتائیے"' },
+};
+
 const SYSTEM_PROMPT = `
 You are correcting the speaker labels on a phone call transcript.
 
@@ -55,11 +86,24 @@ exactly two people:
   - "customer": the other party.
 
 Use conversational logic:
-  - "Hello?" or "<name> speaking" is the person who ANSWERED the phone.
+  - A greeting or "<name> speaking" is the person who ANSWERED the phone.
   - The answer to a question comes from the other speaker than the question.
-  - Back-channels ("yeah", "okay", "sure", "go on") usually belong to the
-    listener, not to whoever is speaking around them.
+  - Back-channels usually belong to the listener, not to whoever is speaking
+    around them.
   - A speaker rarely answers their own question.
+  - Whoever introduces themselves on behalf of a company is the agent, every
+    time they do it. If the same self-introduction appears twice in the call,
+    both instances belong to the same person.
+
+SILENCE MARKERS
+The word list contains markers of the form [+1.8s] wherever the acoustic system
+detected a pause between its own turns. These are measured, not guessed, and
+they are the one piece of evidence you do not otherwise have:
+  - A long pause is very likely a speaker change.
+  - Words with no marker between them were spoken continuously and are very
+    likely the same person.
+Prefer to place your span boundaries ON these markers. Only cross one, or split
+inside an unmarked run, when the conversational logic is unambiguous.
 
 RULES FOR THE SPANS
   - The first span must start at word 1.
@@ -69,14 +113,54 @@ RULES FOR THE SPANS
 Do not return the words themselves - only the numbers and the speaker.
 `.trim();
 
-/** Split turns into a flat word array while remembering the current labels. */
-function flatten(turns: TranscriptTurn[]): { word: string; speaker: string }[] {
-  return turns.flatMap((turn) =>
-    turn.text
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((word) => ({ word, speaker: turn.speaker }))
-  );
+interface FlatWord {
+  word: string;
+  speaker: string;
+  /** Seconds of silence immediately BEFORE this word, at a turn boundary. */
+  gapBefore: number;
+  /** Interpolated timestamp, so repaired turns keep usable start/end values. */
+  at: number;
+}
+
+/**
+ * Split turns into a flat word array, keeping the acoustic evidence attached.
+ *
+ * The previous version threw away timings and handed the model bare words. That
+ * discarded the strongest diarisation signal there is: a two-second silence
+ * between two of Deepgram's turns is near-proof of a speaker change, and it is
+ * measured rather than inferred. Carrying the inter-turn gaps through means the
+ * repair pass can correct the labels without being blind to the acoustics that
+ * produced them.
+ *
+ * Within a turn we only have its start and end, so word times are interpolated.
+ * That is accurate enough for the boundaries, which is all they are used for.
+ */
+function flatten(turns: TranscriptTurn[]): FlatWord[] {
+  const flat: FlatWord[] = [];
+  let previousEnd: number | null = null;
+
+  for (const turn of turns) {
+    const words = turn.text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) continue;
+
+    const start: number = turn.start ?? previousEnd ?? 0;
+    const end: number = turn.end ?? start;
+    const step = words.length > 1 ? (end - start) / words.length : 0;
+    const gap = previousEnd !== null ? Math.max(0, start - previousEnd) : 0;
+
+    words.forEach((word, i) => {
+      flat.push({
+        word,
+        speaker: turn.speaker,
+        gapBefore: i === 0 ? gap : 0,
+        at: start + step * i,
+      });
+    });
+
+    previousEnd = end;
+  }
+
+  return flat;
 }
 
 /**
@@ -125,19 +209,27 @@ export async function repairSpeakers(
   transcript: Transcript
 ): Promise<RepairResult> {
   const words = flatten(transcript.turns);
+  const row = transcript.language
+    ? lookupLanguage(transcript.language.language)
+    : undefined;
 
   if (words.length === 0) {
     return { transcript, applied: false, note: "Repair skipped: empty transcript." };
   }
 
   // 12 numbered words per line keeps the prompt readable for the model and
-  // keeps the indices visually close to the words they label.
+  // keeps the indices visually close to the words they label. Silence markers
+  // are inlined so a pause sits visually between the words it separates.
+  // Anything under 0.25s is ordinary within-speech breathing, not a boundary.
   const lines: string[] = [];
   for (let i = 0; i < words.length; i += 12) {
     lines.push(
       words
         .slice(i, i + 12)
-        .map((w, j) => `${i + j + 1}:${w.word}`)
+        .map((w, j) => {
+          const marker = w.gapBefore >= 0.25 ? `[+${w.gapBefore.toFixed(1)}s] ` : "";
+          return `${marker}${i + j + 1}:${w.word}`;
+        })
         .join(" ")
     );
   }
@@ -146,13 +238,32 @@ export async function repairSpeakers(
     .map((t, i) => `  turn ${i + 1}: ${t.speaker}`)
     .join("\n");
 
+  // Language-specific cues, when we know the language. Without this the model
+  // is given English examples for a Hindi call and has nothing to match on.
+  const cues = row ? BACK_CHANNELS[row.code] : undefined;
+  const languageNote = row
+    ? `\nThis call is in ${row.label}` +
+      (transcript.language?.code_mixed
+        ? ", with English words mixed in throughout"
+        : "") +
+      ". Reason about it in that language; do not translate it.\n" +
+      (cues
+        ? `In ${row.label}, the person who ANSWERED typically opens with ` +
+          `${cues.answering}. The LISTENER's back-channels are ${cues.listening} ` +
+          "- these are short and belong to whoever is NOT holding the floor, " +
+          "even when the acoustic system attached them to the speaker.\n"
+        : "")
+    : "";
+
   const { spans } = await completeJson({
     schema: SpansSchema,
     schemaName: "speaker_spans",
     temperature: 0,
     system: SYSTEM_PROMPT,
     user:
-      `The call has ${words.length} words.\n\n` +
+      `The call has ${words.length} words.` +
+      languageNote +
+      `\n` +
       `Current (unreliable) labelling, for reference only:\n${currentLabels}\n\n` +
       `NUMBERED WORDS\n${lines.join("\n")}\n\n` +
       `Return spans covering words 1 to ${words.length}.`,
@@ -169,13 +280,19 @@ export async function repairSpeakers(
     };
   }
 
-  const turns: TranscriptTurn[] = normalised.map((span) => ({
-    speaker: span.speaker,
-    text: words
-      .slice(span.start - 1, span.end)
-      .map((w) => w.word)
-      .join(" "),
-  }));
+  // Timings are carried through rather than dropped. The previous version
+  // returned turns with no start/end, which left the UI unable to seek to a
+  // turn in the audio and made a repaired transcript harder to check by ear
+  // than an unrepaired one - the opposite of what a repair should do.
+  const turns: TranscriptTurn[] = normalised.map((span) => {
+    const slice = words.slice(span.start - 1, span.end);
+    return {
+      speaker: span.speaker,
+      text: slice.map((w) => w.word).join(" "),
+      start: slice[0]?.at,
+      end: slice[slice.length - 1]?.at,
+    };
+  });
 
   // Text integrity is guaranteed by construction, but assert it anyway: this
   // is the invariant the whole design exists to protect.

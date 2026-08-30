@@ -40,10 +40,33 @@ const MIME_BY_EXT: Record<string, string> = {
  * download such recordings first and pass the local file.
  */
 export async function transcribeWithDeepgram(
-  source: string
+  source: string,
+  options: { language?: string } = {}
 ): Promise<DeepgramUtterance[]> {
   const apiKey = requireEnv("DEEPGRAM_API_KEY");
-  const model = optionalEnv("DEEPGRAM_MODEL", "nova-3");
+
+  /*
+   * nova-3 wherever it has the language, nova-2 only where it does not.
+   *
+   * This used to read "nova-3 is English-first, so anything else drops to
+   * nova-2". That was true once and is not any more: nova-3 has since picked up
+   * Hindi and most Indian languages, and it is a generation better at all of
+   * them. The one that still matters is hi-Latn - the romanised-Hindi model
+   * that reads Hinglish the way a person would write it - which exists only on
+   * nova-2, so the Hinglish path is unchanged.
+   *
+   * Kept as its own list rather than shared with the realtime router: this
+   * decides how the SOURCE recording is read, and being wrong here corrupts the
+   * persona itself rather than one live call.
+   */
+  const NOVA3_LANGUAGES = new Set([
+    "en", "en-IN", "hi", "bn", "ta", "te", "mr", "gu", "kn", "pa", "ur",
+  ]);
+  const language = options.language;
+  const model =
+    language && !NOVA3_LANGUAGES.has(language)
+      ? optionalEnv("DEEPGRAM_MULTILINGUAL_MODEL", "nova-2")
+      : optionalEnv("DEEPGRAM_MODEL", "nova-3");
 
   // Query params are where all the behaviour lives:
   //   diarize    - the whole reason we chose Deepgram: label distinct speakers
@@ -64,6 +87,8 @@ export async function transcribeWithDeepgram(
     punctuate: "true",
     smart_format: "true",
   });
+
+  if (options.language) params.set("language", options.language);
 
   const isUrl = /^https?:\/\//i.test(source);
   const headers: Record<string, string> = {
@@ -118,4 +143,75 @@ export async function transcribeWithDeepgram(
       end: w.end,
     })),
   }));
+}
+
+/**
+ * What Deepgram thinks the audio is, and how sure it was of the words.
+ *
+ * The confidence number is the interesting one. Deepgram has no way to say
+ * "this is not English"; asked for English it returns English, and on Hindi
+ * audio that means confident-sounding nonsense. But its own per-alternative
+ * confidence sags when the acoustics do not match the model, so a low score on
+ * a clean recording is strong evidence that we pointed the wrong model at it -
+ * a signal available on every recording, for free, in the call we already make.
+ */
+export interface DeepgramProbe {
+  detectedLanguage: string | null;
+  languageConfidence: number | null;
+  /** Deepgram's own confidence in the WORDS, 0-1. */
+  transcriptConfidence: number;
+  transcript: string;
+}
+
+export async function probeWithDeepgram(audio: Buffer): Promise<DeepgramProbe> {
+  const apiKey = requireEnv("DEEPGRAM_API_KEY");
+
+  // nova-2 rather than the configured model: detect_language is a nova-2
+  // feature, and this call exists to identify the language, not to produce the
+  // transcript we keep.
+  const params = new URLSearchParams({
+    model: "nova-2",
+    detect_language: "true",
+    punctuate: "true",
+  });
+
+  const response = await fetch(
+    `https://api.deepgram.com/v1/listen?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": "audio/wav",
+      },
+      body: new Uint8Array(audio),
+    }
+  );
+
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 300);
+    throw new Error(`Deepgram language probe failed (${response.status}): ${detail}`);
+  }
+
+  const json = (await response.json()) as {
+    results?: {
+      channels?: {
+        detected_language?: string;
+        language_confidence?: number;
+        alternatives?: { transcript?: string; confidence?: number }[];
+      }[];
+    };
+  };
+
+  const channel = json.results?.channels?.[0];
+  const alternative = channel?.alternatives?.[0];
+
+  return {
+    detectedLanguage: channel?.detected_language ?? null,
+    languageConfidence:
+      typeof channel?.language_confidence === "number"
+        ? channel.language_confidence
+        : null,
+    transcriptConfidence: alternative?.confidence ?? 0,
+    transcript: (alternative?.transcript ?? "").trim(),
+  };
 }

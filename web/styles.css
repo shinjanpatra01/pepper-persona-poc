@@ -64,6 +64,79 @@ main { max-width: 880px; margin: 0 auto; padding: 36px 28px 80px; }
 .btn.ghost { border-color: transparent; color: var(--muted); }
 .btn.ghost:hover { color: var(--fg); border-color: var(--line); }
 
+/* ---------- detail tabs ---------- */
+/* Underline rather than a pill row: the tabs sit directly under the persona
+   name and above the cards, so anything with its own box competes with the
+   cards for the same visual job. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin: -8px 0 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 10px 14px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover { color: var(--fg); }
+.tab.on {
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+  font-weight: 600;
+}
+
+.tel {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; min-width: 210px; font-variant-numeric: tabular-nums;
+}
+.tel:focus { outline: none; border-color: var(--fg); }
+
+/* ---------- latency ---------- */
+/* The four layers need to be told apart at a glance, and the palette is
+   strictly monochrome. So they are shades of the foreground rather than hues -
+   which also survives the theme swap, since every one is derived from --fg. */
+.lat-bar {
+  display: flex; height: 10px; border-radius: 999px;
+  overflow: hidden; background: var(--raised); margin: 8px 0;
+}
+.lat-seg { height: 100%; }
+.lat-seg.s0, .lat-dot.s0 { background: var(--fg); }
+.lat-seg.s1, .lat-dot.s1 { background: color-mix(in srgb, var(--fg) 62%, var(--bg)); }
+.lat-seg.s2, .lat-dot.s2 { background: color-mix(in srgb, var(--fg) 38%, var(--bg)); }
+.lat-seg.s3, .lat-dot.s3 { background: color-mix(in srgb, var(--fg) 18%, var(--bg)); }
+
+.lat-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 18px;
+  font-size: 12px; color: var(--muted); margin-bottom: 18px;
+}
+.lat-key { display: inline-flex; align-items: center; gap: 6px; }
+.lat-dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
+
+.lat-call { padding: 14px 0; border-top: 1px solid var(--line); }
+.lat-head { display: flex; align-items: baseline; gap: 2px; flex-wrap: wrap; }
+.lat-head b { font-size: 19px; letter-spacing: -0.01em; }
+.lat-nums { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+
+.lat-turns { margin-top: 10px; }
+.lat-turns summary { cursor: pointer; }
+.lat-table { width: 100%; margin-top: 8px; font-size: 13px; border-collapse: collapse; }
+.lat-table th {
+  text-align: left; font-weight: 500; color: var(--muted);
+  font-size: 12px; padding: 4px 8px 4px 0;
+}
+.lat-table td { padding: 3px 8px 3px 0; }
+
 /* ---------- persona list ---------- */
 .title-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -181,6 +254,44 @@ pre.prompt {
   padding: 14px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap;
   max-height: 420px; overflow: auto; margin: 0;
 }
+textarea.prompt-edit {
+  width: 100%; box-sizing: border-box; min-height: 340px; resize: vertical;
+  background: var(--raised); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px; font: 12.5px/1.6 var(--mono);
+}
+textarea.prompt-edit:focus { outline: none; border-color: var(--fg); }
+
+.slider { flex: 1; max-width: 320px; accent-color: var(--fg); }
+
+/* Voice panel: label, control, and the reason the control exists. The hint sits
+   under the control rather than beside it because most of these settings are
+   judgement calls, and a one-line reason is what makes them usable. */
+.voice-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.voice-row > .small.muted:last-child { grid-column: 2; margin-top: -2px; }
+.voice-row > label { align-self: center; }
+.select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  max-width: 100%;
+}
+@media (max-width: 620px) {
+  .voice-row { grid-template-columns: 1fr; }
+  .voice-row > .small.muted:last-child { grid-column: 1; }
+}
+.mono { font: 12.5px var(--mono); }
+
 .turn { display: flex; gap: 10px; margin-bottom: 8px; font-size: 14px; }
 .turn .who {
   flex: 0 0 66px; font: 11px var(--mono); color: var(--muted);
@@ -201,3 +312,38 @@ pre.prompt {
 }
 audio { width: 100%; filter: grayscale(1); }
 :root[data-theme="dark"] audio { filter: grayscale(1) invert(0.92); }
+
+/* ---------- landing ---------- */
+.hero { text-align: center; padding: 30px 0 12px; }
+.hero canvas { display: block; margin: 0 auto 18px; }
+.hero h1 {
+  font-size: 38px; line-height: 1.12; letter-spacing: -0.035em;
+  margin: 0 auto 14px; max-width: 15ch;
+}
+.hero .lede {
+  color: var(--muted); max-width: 54ch; margin: 0 auto 26px; font-size: 16px;
+}
+
+.how {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px; background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden; margin-top: 46px;
+}
+.how-item { background: var(--bg); padding: 20px 18px; }
+.how-item .n { font: 11px var(--mono); color: var(--muted); margin-bottom: 10px; }
+.how-item .t { font-weight: 600; margin-bottom: 5px; }
+.how-item .b { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+
+@media (max-width: 620px) {
+  .hero h1 { font-size: 28px; }
+  main { padding: 24px 18px 60px; }
+}
+
+/* ---------- inline rename ---------- */
+input.rename {
+  background: var(--bg); border: 1px solid var(--fg); border-radius: 8px;
+  padding: 4px 9px; font-weight: 600; width: 100%; max-width: 320px;
+}
+input.rename:focus { outline: none; }
+
+header .brand b { cursor: pointer; }
