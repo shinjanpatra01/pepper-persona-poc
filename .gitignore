@@ -5,3 +5,6 @@ node_modules/
 *.mp3
 *.wav
 *.m4a
+
+# Browser bundle of the Vapi SDK; rebuilt by npm run build:vendor
+web/vendor/

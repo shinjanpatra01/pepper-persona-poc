@@ -25,6 +25,13 @@ Options:
                   labels using conversational logic. Recommended whenever
                   the two voices are acoustically similar. The repair is
                   verified word-for-word and rejected if any word changed.
+  --language=<c>  Skip language detection and transcribe as this language.
+                  One of: en, en-IN, hi, hi-Latn, bn, ta, te, mr, gu, kn,
+                  ml, pa, or, ur.
+  --deepgram      Transcribe with Deepgram even when an Indian language is
+                  detected. By default any Indian language other than Indian
+                  English is re-transcribed with Sarvam, turn by turn, over
+                  Deepgram's diarisation. Use this to compare the two.
 `.trim();
 
 async function main() {
@@ -45,18 +52,30 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Transcribing ${source} with Deepgram (diarisation on)...`);
-
   const built = await buildTranscript({
     source,
     notes: flagString(flags, "notes"),
     agentSpeaker: flagNumber(flags, "agent"),
+    forceLanguage: flagString(flags, "language"),
+    skipIndianPath: flags.deepgram === true || flags["no-sarvam"] === true,
+    onProgress: (message) => console.log(message),
   });
-  const { decision, overridden } = built;
+  const { decision, overridden, language } = built;
   let transcript = built.transcript;
 
   // Show the reasoning. PRD 3.2 allows manual correction, and the operator can
   // only correct what they can see.
+  console.log("\nLanguage");
+  console.log("------------------");
+  console.log(`  detected  : ${language.label} (${language.language})`);
+  console.log(`  confidence: ${language.confidence} - ${language.detected_by}`);
+  console.log(`  code-mixed: ${language.code_mixed ? "yes (English mixed in)" : "no"}`);
+  console.log(`  engine    : ${built.transcribedBy}`);
+  for (const signal of language.signals) {
+    console.log(`  - [${signal.source}] ${signal.detail}`);
+  }
+  for (const warning of built.warnings) console.log(`  ! ${warning}`);
+
   console.log("\nSpeaker assignment");
   console.log("------------------");
   for (const reason of decision.reasons) console.log(`  - ${reason}`);

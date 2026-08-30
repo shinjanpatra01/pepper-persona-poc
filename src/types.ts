@@ -36,6 +36,13 @@ export const TranscriptSchema = z.object({
   prosody: z
     .object({ agent: ProsodySchema, customer: ProsodySchema })
     .optional(),
+  /**
+   * What the detection layer decided this recording is. Optional so that
+   * transcripts produced before this layer existed still validate.
+   */
+  language: z.lazy(() => AudioLanguageProfileSchema).optional(),
+  /** Which engine produced the words, for the write-up and for debugging. */
+  transcribed_by: z.string().optional(),
 });
 
 export type TranscriptTurn = z.infer<typeof TranscriptTurnSchema>;
@@ -173,3 +180,48 @@ export const StoredAgentSpecSchema = AgentSpecSchema.extend({
 });
 
 export type StoredAgentSpec = z.infer<typeof StoredAgentSpecSchema>;
+
+/* ------------------------------------------------------------------ *
+ * AUDIO LANGUAGE PROFILE  (output of the detection layer, Phase 1.5)
+ *
+ * Produced before transcription and consumed three times afterwards: it
+ * picks the offline STT, the live agent's realtime STT, and the TTS
+ * voice. Stored with the transcript so a bad routing decision is visible
+ * in an artifact rather than buried in a log line.
+ * ------------------------------------------------------------------ */
+
+export const LanguageSignalSchema = z.object({
+  /** Which detector spoke: sarvam-lid, deepgram-lid, text-signals, llm-audio. */
+  source: z.string(),
+  language: z.string().nullable(),
+  confidence: z.number(),
+  detail: z.string(),
+  /** Only the multimodal probe can judge accent rather than words. */
+  indianSpeaker: z.boolean().optional(),
+  codeMixed: z.boolean().optional(),
+});
+
+export const AudioLanguageProfileSchema = z.object({
+  /** Our canonical key, e.g. "hi", "hi-Latn", "en-IN". */
+  language: z.string(),
+  label: z.string(),
+  is_indian: z.boolean(),
+  /** True for Hinglish and its regional equivalents. */
+  code_mixed: z.boolean(),
+  script: z.string(),
+  confidence: z.enum(["low", "medium", "high"]),
+  /** Which signal actually decided it, in plain words. */
+  detected_by: z.string(),
+  /**
+   * Deepgram's own confidence in the words it returned from the probe, 0-1.
+   * The transcription stage uses it to decide whether Deepgram can be trusted
+   * with this recording once it is pointed at the right language.
+   */
+  deepgram_word_confidence: z.number().nullable().optional(),
+  /** Every detector's verdict, kept so a wrong call can be audited. */
+  signals: z.array(LanguageSignalSchema),
+  notes: z.array(z.string()),
+});
+
+export type LanguageSignal = z.infer<typeof LanguageSignalSchema>;
+export type AudioLanguageProfile = z.infer<typeof AudioLanguageProfileSchema>;

@@ -5,13 +5,17 @@
   "type": "module",
   "scripts": {
     "transcribe": "tsx src/cli/transcribe.ts",
+    "detect": "tsx src/cli/detectLanguage.ts",
     "analyze": "tsx src/cli/analyze.ts",
     "prompt": "tsx src/cli/prompt.ts",
     "generate-agent": "tsx src/cli/generateAgent.ts",
     "vapi:create": "tsx src/cli/vapiCreate.ts",
     "vapi:call": "tsx src/cli/vapiCall.ts",
     "analyze-voice": "tsx src/cli/analyzeVoice.ts",
-    "ui": "tsx src/server/index.ts"
+    "ui": "tsx src/server/index.ts",
+    "build:vendor": "esbuild src/vendor/vapi-entry.js --bundle --format=esm --platform=browser --define:process.env.NODE_ENV=\\\"production\\\" --minify --outfile=web/vendor/vapi.js",
+    "deploy:staging": "scripts/fly-deploy.sh staging",
+    "deploy:production": "scripts/fly-deploy.sh production"
   },
   "repository": {
     "type": "git",
@@ -25,12 +29,14 @@
   },
   "homepage": "https://github.com/shinjanpatra01/pepper-persona-poc#readme",
   "dependencies": {
+    "@vapi-ai/web": "^2.6.3",
     "dotenv": "^17.4.2",
     "openai": "^7.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }

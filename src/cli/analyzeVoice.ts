@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { flagString, parseArgs } from "../lib/args.js";
 import { readJson, writeJson } from "../lib/io.js";
-import { describeLlm } from "../lib/llm.js";
+import { describeAudioLlm } from "../lib/llm.js";
 import { analyzeVoice } from "../persona/analyzeVoice.js";
 import { StoredAgentSpecSchema, TranscriptSchema } from "../types.js";
 import { selectVoice } from "../vapi/voiceMapping.js";
@@ -56,7 +56,7 @@ async function main() {
   console.log(`  reply latency      : ${prosody.mean_response_latency}s`);
   console.log(`  usable segments    : ${prosody.segments.length}`);
 
-  console.log(`\nListening to the agent's voice with ${describeLlm()}...`);
+  console.log(`\nListening to the agent's voice with ${describeAudioLlm()}...`);
   const profile = await analyzeVoice({ audioPath, prosody });
 
   console.log("\nVoice profile");

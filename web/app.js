@@ -30,7 +30,25 @@ const store = {
   },
 };
 
-const state = { config: {}, personas: [], vapi: null, blob: null, call: null };
+const state = {
+  config: {},
+  personas: [],
+  vapi: null,
+  blob: null,
+  call: null,
+  /*
+   * The widgets the current talk screen is drawing into.
+   *
+   * The Vapi client is created once and outlives every screen, so its event
+   * handlers cannot close over the elements that existed when it was made -
+   * screenTalk builds a fresh button, status line and blob each time it runs,
+   * and the handlers would go on updating the detached originals. That looked
+   * exactly like a slow connection: the call was live and audible while the
+   * screen still said "connecting". Handlers read this instead, so they always
+   * write to whatever is on screen now.
+   */
+  ui: null,
+};
 
 /* ---------------- tiny dom helper ---------------- */
 
@@ -103,10 +121,19 @@ async function screenList() {
                 el("div", { class: "nm" }, p.name),
                 el("div", { class: "meta" },
                   p.role
-                    ? [p.role, p.tone, p.accent].filter(Boolean).join(" · ")
+                    ? [p.role, p.tone, p.accent,
+                       p.language && p.language.code !== "en"
+                         ? p.language.label + (p.language.codeMixed ? " + English" : "")
+                         : null,
+                      ].filter(Boolean).join(" · ")
                     : "not processed yet")
               ),
               el("div", { class: "state" }, p.ready ? "Talk →" : "Incomplete"),
+              el("button", {
+                class: "btn ghost small",
+                title: "Rename",
+                onclick: (e) => { e.stopPropagation(); startRename(e.target, p); },
+              }, "Rename"),
               el("button", {
                 class: "btn ghost small",
                 title: "Delete",
@@ -117,10 +144,106 @@ async function screenList() {
   );
 }
 
+/**
+ * Inline rename. Editing in place rather than through a browser prompt(),
+ * which cannot be styled and reads as an error dialog.
+ */
+function startRename(button, p) {
+  const row = button.closest(".persona");
+  const nameEl = row.querySelector(".nm");
+  if (row.querySelector("input")) return;
+
+  const input = el("input", { class: "rename", value: p.name, maxlength: "80" });
+  nameEl.replaceChildren(input);
+  input.focus();
+  input.select();
+
+  let settled = false;
+  const finish = async (save) => {
+    if (settled) return;
+    settled = true;
+    const value = input.value.trim();
+
+    if (!save || !value || value === p.name) {
+      nameEl.textContent = p.name;
+      return;
+    }
+
+    nameEl.textContent = value;
+    const result = await api(`/api/persona/${p.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: value }),
+    });
+    if (result.error) {
+      nameEl.textContent = p.name;
+      alert(result.error);
+      return;
+    }
+    screenList();
+  };
+
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
 async function removePersona(p) {
   if (!confirm(`Delete "${p.name}" and all its artifacts?`)) return;
   await fetch(`/api/persona/${p.id}`, { method: "DELETE" });
   screenList();
+}
+
+/* ---------------- screen: landing ---------------- */
+
+const HOW = [
+  ["Record", "Any call recording. Audio or video, any length."],
+  ["Separate", "Speakers split apart, then corrected by conversational logic."],
+  ["Extract", "Tone, strategy, objection handling and voice, as structured data."],
+  ["Speak", "A voice agent that behaves recognisably like the original."],
+];
+
+function screenLanding() {
+  setCrumb("");
+
+  const canvas = el("canvas", { id: "blob", style: "width:200px;height:200px" });
+
+  mount(app(),
+    el("section", { class: "hero" },
+      canvas,
+      el("h1", {}, "Turn a call recording into a voice agent."),
+      el("p", { class: "lede" },
+        "Drop in a recording of someone doing their job on the phone. " +
+        "Their tone, tactics, pacing and accent are reverse-engineered into " +
+        "a structured persona, then rebuilt as an agent you can call."),
+      el("div", { class: "row", style: "justify-content:center;margin-top:8px" },
+        el("button", { class: "btn solid", onclick: () => go("#/new") }, "Create a persona"),
+        el("button", { class: "btn", onclick: () => go("#/personas") }, "View personas"))
+    ),
+
+    el("section", { class: "how" },
+      ...HOW.map(([title, body], i) =>
+        el("div", { class: "how-item" },
+          el("div", { class: "n" }, String(i + 1).padStart(2, "0")),
+          el("div", { class: "t" }, title),
+          el("div", { class: "b" }, body)))
+    ),
+
+    el("p", { class: "small muted center", style: "margin-top:40px" },
+      "Every intermediate artifact stays inspectable: transcript, agent spec, " +
+      "voice profile and the generated prompt.")
+  );
+
+  // A slow idle blob, the same component the talk screen uses, so the landing
+  // page previews what a call looks like instead of describing it.
+  const blob = new Blob(canvas);
+  state.blob = blob;
+  blob.setState("idle");
+  blob.start();
 }
 
 /* ---------------- screen: create ---------------- */
@@ -178,7 +301,7 @@ function screenNew() {
   mount(app(),
     el("div", { class: "title-row" },
       el("h1", {}, "New persona"),
-      el("button", { class: "btn ghost", onclick: () => go("#/") }, "Cancel")
+      el("button", { class: "btn ghost", onclick: () => go("#/personas") }, "Cancel")
     ),
     drop,
     fileInput,
@@ -278,12 +401,12 @@ async function createPersona(file, name, status) {
       append("\nPersona ready.\n");
       stepsBox.append(el("div", { class: "row", style: "margin-top:16px" },
         el("button", { class: "btn solid", onclick: () => go(`#/talk/${id}`) }, "Talk to it"),
-        el("button", { class: "btn", onclick: () => go("#/") }, "All personas")));
+        el("button", { class: "btn", onclick: () => go("#/personas") }, "All personas")));
     } else {
       append(`\nPipeline stopped (exit ${code}). The artifacts produced so far are kept.\n`);
       stepsBox.append(el("div", { class: "row", style: "margin-top:16px" },
         el("button", { class: "btn", onclick: () => go(`#/detail/${id}`) }, "Inspect what was built"),
-        el("button", { class: "btn ghost", onclick: () => go("#/") }, "Back")));
+        el("button", { class: "btn ghost", onclick: () => go("#/personas") }, "Back")));
     }
   });
 
@@ -305,7 +428,7 @@ async function screenTalk(id) {
   const caption = el("div", { class: "caption" });
 
   const talkBtn = el("button", { class: "btn solid" }, "Start call");
-  const backBtn = el("button", { class: "btn ghost", onclick: () => go("#/") }, "Back");
+  const backBtn = el("button", { class: "btn ghost", onclick: () => go("#/personas") }, "Back");
   const detailBtn = el("button", { class: "btn ghost", onclick: () => go(`#/detail/${id}`) }, "Details");
 
   mount(app(),
@@ -321,6 +444,10 @@ async function screenTalk(id) {
 
   const blob = new Blob(canvas);
   state.blob = blob;
+  // Point the long-lived Vapi handlers at this screen straight away, not only
+  // once the button is pressed: a call started here and left running would
+  // otherwise report its end to the previous screen's widgets.
+  state.ui = { button: talkBtn, status, caption, blob };
   blob.start();
 
   const assistantId = data.assistant?.assistantId;
@@ -344,49 +471,55 @@ async function toggleCall(assistantId, button, status, caption, blob) {
     return;
   }
 
+  state.ui = { button, status, caption, blob };
+
   button.disabled = true;
   status.textContent = "connecting…";
   blob.setState("connecting");
 
   try {
     if (!state.vapi) {
-      const { default: Vapi } = await import("https://esm.sh/@vapi-ai/web@2");
+      // Bundled locally (npm run build:vendor). Importing this from a CDN
+      // meant the whole call screen depended on someone else's uptime and on
+      // a deep dependency graph resolving in the browser; it failed with an
+      // opaque "Failed to fetch dynamically imported module".
+      const { default: Vapi } = await import("/vendor/vapi.js");
       state.vapi = new Vapi(state.config.vapiPublicKey);
 
-      state.vapi.on("call-start", () => {
-        state.call = true;
-        button.disabled = false;
-        button.textContent = "End call";
-        status.textContent = "listening";
-        blob.setState("listening");
-      });
+      state.vapi.on("call-start", () => markConnected());
 
       state.vapi.on("call-end", () => {
         state.call = null;
-        button.disabled = false;
-        button.textContent = "Start call";
-        status.textContent = "call ended";
-        blob.setState("idle");
-        blob.setLevel(0);
+        const ui = state.ui;
+        if (!ui) return;
+        ui.button.disabled = false;
+        ui.button.textContent = "Start call";
+        ui.status.textContent = "call ended";
+        ui.blob.setState("idle");
+        ui.blob.setLevel(0);
       });
 
       // The blob is driven by real output loudness rather than a canned
       // animation, so silence looks like silence.
-      state.vapi.on("volume-level", (v) => blob.setLevel(v));
+      state.vapi.on("volume-level", (v) => state.ui?.blob.setLevel(v));
 
       state.vapi.on("speech-start", () => {
-        blob.setState("speaking");
-        status.textContent = "speaking";
+        // Audio before call-start is still a connected call; say so.
+        markConnected();
+        if (!state.ui) return;
+        state.ui.blob.setState("speaking");
+        state.ui.status.textContent = "speaking";
       });
       state.vapi.on("speech-end", () => {
-        blob.setState("listening");
-        status.textContent = "listening";
-        blob.setLevel(0);
+        if (!state.ui) return;
+        state.ui.blob.setState("listening");
+        state.ui.status.textContent = "listening";
+        state.ui.blob.setLevel(0);
       });
 
       state.vapi.on("message", (m) => {
         if (m.type === "transcript" && m.transcriptType === "final") {
-          caption.replaceChildren(
+          state.ui?.caption.replaceChildren(
             el("span", { class: "who" }, m.role === "assistant" ? "agent" : "you"),
             document.createTextNode(m.transcript)
           );
@@ -395,14 +528,21 @@ async function toggleCall(assistantId, button, status, caption, blob) {
 
       state.vapi.on("error", (e) => {
         state.call = null;
-        button.disabled = false;
-        button.textContent = "Start call";
-        blob.setState("idle");
-        status.textContent = "error: " + (e?.errorMsg || e?.message || JSON.stringify(e));
+        const ui = state.ui;
+        if (!ui) return;
+        ui.button.disabled = false;
+        ui.button.textContent = "Start call";
+        ui.blob.setState("idle");
+        ui.status.textContent =
+          "error: " + (e?.errorMsg || e?.message || JSON.stringify(e));
       });
     }
 
     await state.vapi.start(assistantId);
+    // start() resolving means the call exists. If call-start was missed or is
+    // slow, the button would otherwise stay disabled under "connecting" for a
+    // call the user can already hear.
+    markConnected();
   } catch (error) {
     button.disabled = false;
     blob.setState("idle");
@@ -410,76 +550,673 @@ async function toggleCall(assistantId, button, status, caption, blob) {
   }
 }
 
+/** Flip the screen to a live call. Idempotent: several events can report it. */
+function markConnected() {
+  if (state.call) return;
+  state.call = true;
+  const ui = state.ui;
+  if (!ui) return;
+  ui.button.disabled = false;
+  ui.button.textContent = "End call";
+  ui.status.textContent = "listening";
+  ui.blob.setState("listening");
+}
+
 /* ---------------- screen: detail ---------------- */
 
-async function screenDetail(id) {
+/**
+ * The persona detail screen, in three tabs.
+ *
+ * It used to be one column of eight cards, and the order was the order the
+ * pipeline happened to produce things in: recording, spec, language, voice
+ * heard, signature phrases, prompt, voice controls, full transcript. That made
+ * the two things you actually do repeatedly - edit the prompt, change the voice
+ * - sit in the middle of a long scroll, below reference material you read once
+ * and never again, and above a transcript that can run to hundreds of turns.
+ *
+ * The split is by what you came here to do:
+ *
+ *   Tune       the loop: edit the prompt, change the voice, call, repeat.
+ *   Persona    what the pipeline extracted. Read once, checked when surprised.
+ *   Transcript the source recording's words. Long, and its own thing.
+ *
+ * The tab lives in the URL rather than in a variable, so a reload keeps your
+ * place and the back button steps between tabs the way it looks like it should.
+ */
+const DETAIL_TABS = [
+  { key: "tune", label: "Tune" },
+  { key: "persona", label: "Persona" },
+  { key: "transcript", label: "Transcript" },
+  { key: "latency", label: "Latency" },
+];
+
+async function screenDetail(id, tab = "tune") {
   const d = await api(`/api/persona/${id}`);
   const name = d.meta?.name ?? id;
   setCrumb(name);
   const s = d.spec;
+  const active = DETAIL_TABS.some((t) => t.key === tab) ? tab : "tune";
+
+  const tabBar = el("nav", { class: "tabs" },
+    ...DETAIL_TABS.map((t) => {
+      // The transcript tab carries its size, because "long" is the thing worth
+      // knowing before you click it.
+      const count = t.key === "transcript" && d.transcript
+        ? ` ${d.transcript.turns.length}`
+        : "";
+      return el("button", {
+        class: `tab${t.key === active ? " on" : ""}`,
+        onclick: () => go(`#/detail/${encodeURIComponent(id)}/${t.key}`),
+      }, t.label + count);
+    }));
+
+  const panes = {
+    tune: () => [
+      d.systemPrompt
+        ? promptEditor(id, d)
+        : el("div", { class: "card" },
+            el("h3", {}, "System prompt"),
+            el("div", { class: "muted" }, "Not generated yet.")),
+
+      d.assistant?.assistantId ? phoneCall(id, d) : null,
+
+      d.assistant?.assistantId
+        ? voiceControls(id, d)
+        : el("div", { class: "card" },
+            el("h3", {}, "Voice of the live agent"),
+            el("div", { class: "muted" },
+              "No Vapi agent exists yet, so there is nothing to tune. " +
+              "Run vapi:create for this persona first.")),
+
+      el("div", { class: "card" },
+        el("h3", {}, "Source recording"),
+        el("div", { class: "small muted", style: "margin-bottom:10px" },
+          "The voice being recreated. Worth replaying right after a change, " +
+          "because the question is never whether the agent sounds good - it is " +
+          "whether it sounds like this."),
+        el("audio", { controls: true, preload: "metadata", src: `/api/audio/${id}` })),
+    ],
+
+    persona: () => [
+      s ? el("div", { class: "card" },
+        el("h3", {}, "Persona"),
+        el("table", {},
+          tr("role", s.role),
+          tr("objective", s.objective),
+          tr("target customer", s.target_customer)),
+        el("div", { style: "margin-top:12px" },
+          chip(s.tone.style),
+          chip(`formality ${s.tone.formality}`),
+          chip(`energy ${s.tone.energy}`),
+          chip(`warmth ${s.tone.warmth}`),
+          chip(`aggressiveness ${s.objection_handling.aggressiveness}`),
+          chip(`persistence ${s.objection_handling.persistence}`))
+      ) : el("div", { class: "card" },
+        el("h3", {}, "Persona"),
+        el("div", { class: "muted" }, "Not extracted yet.")),
+
+      s?.evidence?.signature_phrases?.length ? el("div", { class: "card" },
+        el("h3", {}, "Signature phrases"),
+        el("div", { class: "small muted", style: "margin-bottom:10px" },
+          "Verbatim from the recording."),
+        ...s.evidence.signature_phrases.map((p) => el("div", { class: "chip" }, `"${p}"`))
+      ) : null,
+
+      s?.voice_profile ? el("div", { class: "card" },
+        // "heard", not "voice": the Tune tab also has a voice card, but that one
+        // CHANGES it. This only reports what the analyser found in the audio.
+        el("h3", {}, "Voice heard in the recording"),
+        el("table", {},
+          tr("accent", `${s.voice_profile.accent} (${s.voice_profile.accent_code})`),
+          tr("gender", s.voice_profile.perceived_gender),
+          tr("pace", s.voice_profile.perceived_pace),
+          tr("register", s.voice_profile.emotional_register),
+          d.transcript?.prosody?.agent
+            ? tr("measured rate", `${d.transcript.prosody.agent.words_per_minute} words/min`)
+            : null)
+      ) : null,
+
+      d.transcript?.language ? el("div", { class: "card" },
+        el("h3", {}, "Language"),
+        el("table", {},
+          tr("detected", `${d.transcript.language.label} (${d.transcript.language.language})`),
+          tr("code-mixed", d.transcript.language.code_mixed ? "yes, English mixed in" : "no"),
+          tr("confidence", `${d.transcript.language.confidence} — ${d.transcript.language.detected_by}`),
+          tr("transcribed by", d.transcript.transcribed_by ?? "—")),
+        // Every detector's verdict, not just the winner: a wrong routing
+        // decision is only fixable if you can see which signal caused it.
+        el("div", { style: "margin-top:12px" },
+          ...d.transcript.language.signals.map((sig) =>
+            el("div", { class: "muted", style: "margin-bottom:4px" },
+              `[${sig.source}] ${sig.detail}`))),
+        ...(d.transcript.language.notes ?? []).map((n) =>
+          el("div", { class: "muted", style: "margin-top:6px" }, `! ${n}`))
+      ) : null,
+    ],
+
+    latency: () => [latencyPanel(id, d)],
+
+    transcript: () => [
+      d.transcript ? el("div", { class: "card" },
+        el("h3", {}, `Transcript — ${d.transcript.turns.length} turns`),
+        ...d.transcript.turns.map((t) =>
+          el("div", { class: `turn ${t.speaker}` },
+            el("div", { class: "who" }, t.speaker),
+            el("div", { class: "txt" }, t.text)))
+      ) : el("div", { class: "card" },
+        el("h3", {}, "Transcript"),
+        el("div", { class: "muted" }, "Not transcribed yet.")),
+    ],
+  };
 
   mount(app(),
     el("div", { class: "title-row" },
       el("h1", {}, name),
       el("div", { class: "row" },
+        el("button", {
+          class: "btn ghost small",
+          onclick: async () => {
+            const next = prompt("Rename persona", name);
+            if (!next || !next.trim() || next.trim() === name) return;
+            await api(`/api/persona/${id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: next.trim() }),
+            });
+            screenDetail(id, active);
+          },
+        }, "Rename"),
         d.assistant?.assistantId
           ? el("button", { class: "btn solid", onclick: () => go(`#/talk/${id}`) }, "Talk")
           : null,
-        el("button", { class: "btn ghost", onclick: () => go("#/") }, "Back"))
+        el("button", { class: "btn ghost", onclick: () => go("#/personas") }, "Back"))
     ),
-
-    el("div", { class: "card" },
-      el("h3", {}, "Recording"),
-      el("audio", { controls: true, preload: "metadata", src: `/api/audio/${id}` })
-    ),
-
-    s ? el("div", { class: "card" },
-      el("h3", {}, "Persona"),
-      el("table", {},
-        tr("role", s.role),
-        tr("objective", s.objective),
-        tr("target customer", s.target_customer)),
-      el("div", { style: "margin-top:12px" },
-        chip(s.tone.style),
-        chip(`formality ${s.tone.formality}`),
-        chip(`energy ${s.tone.energy}`),
-        chip(`warmth ${s.tone.warmth}`),
-        chip(`aggressiveness ${s.objection_handling.aggressiveness}`),
-        chip(`persistence ${s.objection_handling.persistence}`))
-    ) : el("div", { class: "card" }, el("h3", {}, "Persona"), el("div", { class: "muted" }, "Not extracted yet.")),
-
-    s?.voice_profile ? el("div", { class: "card" },
-      el("h3", {}, "Voice"),
-      el("table", {},
-        tr("accent", `${s.voice_profile.accent} (${s.voice_profile.accent_code})`),
-        tr("gender", s.voice_profile.perceived_gender),
-        tr("pace", s.voice_profile.perceived_pace),
-        tr("register", s.voice_profile.emotional_register),
-        d.transcript?.prosody?.agent
-          ? tr("measured rate", `${d.transcript.prosody.agent.words_per_minute} words/min`)
-          : null)
-    ) : null,
-
-    s?.evidence?.signature_phrases?.length ? el("div", { class: "card" },
-      el("h3", {}, "Signature phrases (verbatim from the recording)"),
-      ...s.evidence.signature_phrases.map((p) => el("div", { class: "chip" }, `"${p}"`))
-    ) : null,
-
-    d.systemPrompt ? el("div", { class: "card" },
-      el("h3", {}, "System prompt"),
-      d.firstMessage ? el("div", { class: "small muted", style: "margin-bottom:10px" },
-        `Opens with: "${d.firstMessage}"`) : null,
-      el("pre", { class: "prompt" }, d.systemPrompt)
-    ) : null,
-
-    d.transcript ? el("div", { class: "card" },
-      el("h3", {}, `Transcript — ${d.transcript.turns.length} turns`),
-      ...d.transcript.turns.map((t) =>
-        el("div", { class: `turn ${t.speaker}` },
-          el("div", { class: "who" }, t.speaker),
-          el("div", { class: "txt" }, t.text)))
-    ) : null
+    tabBar,
+    ...panes[active]()
   );
+}
+
+/**
+ * The system prompt, editable in place.
+ *
+ * Saving writes the same file the pipeline writes and pushes it to the live
+ * Vapi agent, so the next call uses it - there is no separate deploy step to
+ * forget. The warning about regeneration is shown rather than enforced: the
+ * pipeline overwriting a hand edit is fine as long as nobody is surprised by
+ * it.
+ */
+function promptEditor(id, d) {
+  const box = el("textarea", { class: "prompt-edit", spellcheck: "false" });
+  box.value = d.systemPrompt;
+
+  const note = el("span", { class: "small muted" });
+  const save = el("button", { class: "btn solid small" }, "Save and push");
+  const revert = el("button", { class: "btn ghost small" }, "Revert");
+
+  revert.onclick = () => {
+    box.value = d.systemPrompt;
+    note.textContent = "Reverted to the last saved version.";
+  };
+
+  save.onclick = async () => {
+    save.disabled = true;
+    note.textContent = "saving…";
+    try {
+      const r = await api(`/api/persona/${id}/prompt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt: box.value }),
+      });
+      if (r.error) note.textContent = r.error;
+      else {
+        d.systemPrompt = box.value.trim();
+        note.textContent = r.pushed
+          ? "Saved and pushed to the live agent."
+          : r.note ?? "Saved.";
+      }
+    } catch (e) {
+      note.textContent = "Could not save: " + e.message;
+    }
+    save.disabled = false;
+  };
+
+  return el("div", { class: "card" },
+    el("h3", {}, "System prompt"),
+    d.firstMessage ? el("div", { class: "small muted", style: "margin-bottom:10px" },
+      `Opens with: "${d.firstMessage}"`) : null,
+    box,
+    el("div", { class: "row", style: "margin-top:10px" }, save, revert, note),
+    el("div", { class: "small muted", style: "margin-top:8px" },
+      "Re-running the prompt stage regenerates this file and discards edits.")
+  );
+}
+
+/**
+ * Every part of the voice, editable against the live agent.
+ *
+ * The pipeline's voice is a starting point rather than a measurement: gender
+ * comes from an analyser's impression of the recording, speed from dividing
+ * words-per-minute by a tuning constant, and the voice itself is one UUID
+ * picked per language and gender out of a catalogue of hundreds. Whether any of
+ * it sounds like the person on the tape is settled by listening, so the loop
+ * that matters is change-it, call, change-it - not edit code and re-push.
+ *
+ * Each control pushes on its own. There is no Save button because there is no
+ * moment where a half-set voice is meaningful, and because the thing you do
+ * after every change is dial the number again.
+ */
+function voiceControls(id, d) {
+  const live = d.liveVoice;
+  const saved = d.voiceOverrides ?? {};
+  const isCartesia = live?.provider === "cartesia";
+
+  const note = el("div", { class: "small muted", style: "margin-top:8px" });
+  const say = (r, ok) => {
+    note.textContent = r?.error
+      ? r.error
+      : r?.pushed
+        ? ok
+        : (r?.note ?? "Saved.");
+  };
+
+  // Pushed one field at a time so a failure names the setting that caused it.
+  const push = async (patch, ok) => {
+    note.textContent = "saving…";
+    try {
+      say(await api(`/api/persona/${id}/voice`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }), ok);
+    } catch (e) {
+      note.textContent = "Could not save: " + e.message;
+    }
+  };
+
+  const rows = [];
+  const row = (label, hint, ...controls) =>
+    rows.push(el("div", { class: "voice-row" },
+      el("label", { class: "small" }, label),
+      el("div", { class: "row" }, ...controls),
+      hint ? el("div", { class: "small muted" }, hint) : null));
+
+  /* ---- which voice (this is where gender lives) ---- */
+  const picker = el("select", { class: "select" },
+    el("option", { value: "" }, "loading voices…"));
+  const genderFilter = el("select", { class: "select" },
+    el("option", { value: "" }, "any gender"),
+    el("option", { value: "masculine" }, "masculine"),
+    el("option", { value: "feminine" }, "feminine"));
+  const preview = el("div", { class: "small muted" });
+
+  let catalogue = [];
+  const paint = () => {
+    const want = genderFilter.value;
+    const shown = catalogue.filter((v) => !want || v.gender === want);
+    picker.replaceChildren(
+      el("option", { value: "" }, `— ${shown.length} voices —`),
+      ...shown.map((v) =>
+        el("option", { value: v.id, selected: v.id === live?.voiceId },
+          `${v.name}${v.gender ? ` (${v.gender})` : ""}`)));
+    const cur = catalogue.find((v) => v.id === picker.value);
+    preview.textContent = cur?.description ?? "";
+  };
+
+  if (isCartesia) {
+    api(`/api/cartesia/voices?language=${encodeURIComponent(live?.language ?? "en")}`)
+      .then((r) => {
+        if (r.error) {
+          picker.replaceChildren(el("option", {}, r.error));
+          return;
+        }
+        catalogue = r.voices;
+        paint();
+      })
+      .catch((e) => picker.replaceChildren(el("option", {}, String(e.message))));
+
+    genderFilter.addEventListener("change", paint);
+    picker.addEventListener("change", () => {
+      const cur = catalogue.find((v) => v.id === picker.value);
+      preview.textContent = cur?.description ?? "";
+      if (picker.value) push({ voiceId: picker.value }, `Live agent now speaks as ${cur?.name}.`);
+    });
+
+    row("Voice", null, genderFilter, picker);
+    rows.push(el("div", { class: "voice-row" }, el("span", {}), preview));
+  }
+
+  /* ---- speed ---- */
+  const range = isCartesia ? { min: 0.6, max: 1.5 } : { min: 0.9, max: 1.3 };
+  const curSpeed = saved.speed ?? live?.speed ?? 1;
+  const speed = el("input", {
+    type: "range", class: "slider", step: "0.01",
+    min: String(range.min), max: String(range.max), value: String(curSpeed),
+  });
+  const speedValue = el("span", { class: "mono" }, `${Number(curSpeed).toFixed(2)}x`);
+  speed.addEventListener("input", () => {
+    speedValue.textContent = `${Number(speed.value).toFixed(2)}x`;
+  });
+  // On release, not on drag: each change is an API call to Vapi.
+  speed.addEventListener("change", () =>
+    push({ speed: Number(speed.value) }, `Live agent now speaks at ${speed.value}x.`));
+  row("Speaking rate", isCartesia
+    ? "Cartesia generates slower speech rather than stretching finished audio, so it holds up below 0.9x where Azure does not."
+    : "0.9x is the floor: below it the voice is stretched rather than slowed, which is what makes it sound synthetic.",
+    speed, speedValue);
+
+  if (isCartesia) {
+    /* ---- volume ---- */
+    const curVol = saved.volume ?? live?.volume ?? 1;
+    const vol = el("input", {
+      type: "range", class: "slider", step: "0.05", min: "0.5", max: "2",
+      value: String(curVol),
+    });
+    const volValue = el("span", { class: "mono" }, Number(curVol).toFixed(2));
+    vol.addEventListener("input", () => {
+      volValue.textContent = Number(vol.value).toFixed(2);
+    });
+    vol.addEventListener("change", () =>
+      push({ volume: Number(vol.value) }, `Volume set to ${vol.value}.`));
+    row("Volume", null, vol, volValue);
+
+    /* ---- model ---- */
+    const model = el("select", { class: "select" });
+    row("Model", "Newer Sonic models sound better and cost the same through Vapi; older ones are here for comparison.", model);
+
+    /* ---- language ---- */
+    const language = el("select", { class: "select" });
+    row("Language", "Hinglish is spoken as Hindi: the Hindi voices read embedded English words natively, which is the whole reason they suit code-mixed speech.", language);
+
+    /* ---- accent localisation ---- */
+    const accent = el("select", { class: "select" },
+      el("option", { value: "" }, "leave alone"),
+      el("option", { value: "0", selected: live?.accentLocalization === 0 }, "keep the voice's native accent"),
+      el("option", { value: "1", selected: live?.accentLocalization === 1 }, "pull the accent toward the language"));
+    accent.addEventListener("change", () => {
+      if (accent.value === "") return;
+      push({ accentLocalization: Number(accent.value) }, "Accent handling updated.");
+    });
+    row("Accent", "Which of these is right is not predictable — localisation can fix an accent or flatten the person. Worth trying both on one call.", accent);
+
+    /* ---- emotion (legacy) ---- */
+    const emotion = el("select", { class: "select" });
+    row("Emotion", "A Sonic-1 control. Later models accept it and ignore it, so treat it as a no-op unless you are on an older model.", emotion);
+
+    // The option lists come from the server, which reads them from the values
+    // Vapi validates against - so the console cannot offer a choice that 400s.
+    api("/api/voice-options").then((o) => {
+      const fill = (sel, values, current, blank) => {
+        sel.replaceChildren(
+          el("option", { value: "" }, blank),
+          ...values.map((v) =>
+            el("option", { value: v, selected: v === current }, v)));
+      };
+      fill(model, o.models, live?.model, "— model —");
+      fill(language, o.languages, live?.language, "— language —");
+      fill(emotion, o.emotions, live?.emotion, "none");
+      model.addEventListener("change", () =>
+        model.value && push({ model: model.value }, `Now using ${model.value}.`));
+      language.addEventListener("change", () => {
+        if (!language.value) return;
+        push({ language: language.value }, `Language set to ${language.value}.`);
+        // The catalogue is per language, so the voice list has to follow it.
+        api(`/api/cartesia/voices?language=${encodeURIComponent(language.value)}`)
+          .then((r) => { catalogue = r.voices ?? []; paint(); });
+      });
+      emotion.addEventListener("change", () =>
+        push({ emotion: emotion.value || null },
+          emotion.value ? `Emotion set to ${emotion.value}.` : "Emotion cleared."));
+    });
+  }
+
+  return el("div", { class: "card" },
+    el("h3", {}, "Voice of the live agent"),
+    el("div", { class: "small muted", style: "margin-bottom:10px" },
+      live
+        ? `Live: ${live.provider}${live.model ? ` / ${live.model}` : ""}${live.language ? ` / ${live.language}` : ""}`
+        : "The live agent's voice could not be read from Vapi."),
+    ...rows,
+    note,
+    !isCartesia && live ? el("div", { class: "small muted", style: "margin-top:8px" },
+      "This agent is on Azure, which exposes only a speaking rate. Set " +
+      "VAPI_TTS_PROVIDER=cartesia and re-run vapi:create for the full set.") : null);
+}
+
+/**
+ * Re-run the vapi stage, which recreates the assistant from files already on
+ * disk. Cheap - no transcription, no LLM extraction, just the Vapi call - so it
+ * is safe to offer as a button rather than as a warning to go and read the
+ * README.
+ */
+function recreateAgentButton(id) {
+  const btn = el("button", { class: "btn small" }, "Recreate agent");
+  const out = el("span", { class: "small muted" });
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    out.textContent = " recreating…";
+    const source = new EventSource(`/api/run/vapi/${encodeURIComponent(id)}`);
+    source.addEventListener("done", (e) => {
+      source.close();
+      const code = JSON.parse(e.data).code;
+      out.textContent = code === 0 ? " done — reloading" : ` failed (exit ${code})`;
+      if (code === 0) setTimeout(() => route(), 800);
+      else btn.disabled = false;
+    });
+    source.onerror = () => {
+      source.close();
+      out.textContent = " lost connection to the server";
+      btn.disabled = false;
+    };
+  });
+  return el("span", {}, btn, out);
+}
+
+/**
+ * Dial a real phone from the console.
+ *
+ * The browser "Talk" button and this are different tests, and the difference is
+ * the point. A web call runs on a laptop mic through a wide codec; a phone call
+ * is 8kHz narrowband over a carrier, with jitter and packet loss. A persona can
+ * sound convincing in the browser and fall apart on the phone - and the phone is
+ * the only one a customer will ever hear.
+ *
+ * Deliberately one number, typed each time, with no saved list: this is a test
+ * harness for a persona, not an outbound dialler, and the difference between
+ * those two is mostly the presence of a list.
+ */
+function phoneCall(id, d) {
+  const last = d.call;
+  const input = el("input", {
+    type: "tel",
+    placeholder: "+919876543210",
+    value: last?.to ?? "",
+    class: "tel",
+  });
+  const status = el("div", { class: "small muted", style: "margin-top:10px" },
+    last?.callId ? `Last call: ${last.endedReason ?? last.status ?? "placed"}` : "");
+  const btn = el("button", { class: "btn solid" }, "Call");
+
+  let pollTimer = null;
+  const poll = (callId) => {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      try {
+        const c = await api(`/api/call/${callId}`);
+        if (c.error) return;
+        status.textContent =
+          `${c.status ?? "…"}${c.endedReason ? ` — ${c.endedReason}` : ""}`;
+        // Stop once it is over; nothing after this changes.
+        if (c.status === "ended") {
+          clearInterval(pollTimer);
+          status.textContent =
+            `Ended: ${c.endedReason ?? "unknown"}. Latency tab has the breakdown.`;
+        }
+      } catch {
+        clearInterval(pollTimer);
+      }
+    }, 3000);
+  };
+
+  btn.addEventListener("click", async () => {
+    const to = input.value.trim();
+    if (!to) {
+      status.textContent = "Enter a number first.";
+      return;
+    }
+    btn.disabled = true;
+    status.textContent = `Dialling ${to}…`;
+    try {
+      const r = await api(`/api/persona/${id}/call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to }),
+      });
+      if (r.error) {
+        status.textContent = r.error;
+        // The one failure with an obvious next action, so offer it rather than
+        // making someone go and find the right CLI stage.
+        if (r.needsAgent) status.append(" ", recreateAgentButton(id));
+      } else {
+        status.textContent = `Ringing ${r.to}…`;
+        poll(r.callId);
+      }
+    } catch (e) {
+      status.textContent = "Could not place the call: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  if (state.config.hasPhoneNumber === false) {
+    return el("div", { class: "card" },
+      el("h3", {}, "Call a phone"),
+      el("div", { class: "muted" },
+        "VAPI_PHONE_NUMBER_ID is not set on the server, so there is no number " +
+        "to dial out from."));
+  }
+
+  return el("div", { class: "card" },
+    el("h3", {}, "Call a phone"),
+    el("div", { class: "small muted", style: "margin-bottom:10px" },
+      "The agent dials out and speaks to whoever answers. This is the test that " +
+      "counts: narrowband audio over a carrier is what a customer actually hears, " +
+      "and it is harsher than the browser."),
+    el("div", { class: "row" }, input, btn),
+    el("div", { class: "small muted", style: "margin-top:8px" },
+      "Full international format, including country code."),
+    status);
+}
+
+/**
+ * Where the time goes on a call.
+ *
+ * "It reacts late" is four different bugs wearing the same coat - a slow
+ * transcriber, endpointing that waits out silence which already ended, a model
+ * that thinks before answering, or a voice slow to make sound. Each is fixed in
+ * a different place, so the useful number is never the total: it is which
+ * component owns the total.
+ *
+ * Hence the bar. Four segments, drawn to scale, and the largest one is the one
+ * to go and fix. A column of five numbers makes you do that comparison in your
+ * head on every row; a bar has already done it.
+ */
+const LAYERS = [
+  { key: "transcriber", label: "Transcriber", hint: "speech to words" },
+  { key: "endpointing", label: "Endpointing", hint: "deciding you had finished" },
+  { key: "model", label: "Model", hint: "thinking, to first token" },
+  { key: "voice", label: "Voice", hint: "words to sound" },
+];
+
+const ms = (n) => (n === null || n === undefined ? "—" : `${Math.round(n)}ms`);
+
+function latencyBar(parts) {
+  const total = LAYERS.reduce((sum, l) => sum + (parts[l.key] ?? 0), 0);
+  if (!total) return el("div", { class: "small muted" }, "no breakdown recorded");
+  return el("div", { class: "lat-bar" },
+    ...LAYERS.map((l, i) =>
+      el("div", {
+        class: `lat-seg s${i}`,
+        style: `width:${((parts[l.key] ?? 0) / total) * 100}%`,
+        title: `${l.label}: ${ms(parts[l.key])}`,
+      })));
+}
+
+function latencyPanel(id, d) {
+  const card = el("div", { class: "card" },
+    el("h3", {}, "Latency"),
+    el("div", { class: "small muted" }, "loading…"));
+
+  const legend = el("div", { class: "lat-legend" },
+    ...LAYERS.map((l, i) =>
+      el("span", { class: "lat-key" },
+        el("i", { class: `lat-dot s${i}` }),
+        `${l.label} — ${l.hint}`)));
+
+  api(`/api/persona/${id}/latency`).then((r) => {
+    if (r.error) {
+      mount(card, el("h3", {}, "Latency"), el("div", { class: "muted" }, r.error));
+      return;
+    }
+    if (!r.calls?.length) {
+      mount(card,
+        el("h3", {}, "Latency"),
+        el("div", { class: "muted" },
+          r.note ??
+          (r.emptyCalls
+            ? `${r.emptyCalls} recent call${r.emptyCalls > 1 ? "s" : ""} had no back-and-forth, ` +
+              "so there is nothing to measure. Make a call and answer the agent."
+            : "No calls recorded yet.")));
+      card.append(legend);
+      return;
+    }
+
+    const kids = [
+      el("h3", {}, "Latency"),
+      el("div", { class: "small muted", style: "margin-bottom:14px" },
+        "Measured by Vapi on each turn. The segments are drawn to scale, so the " +
+        "widest one is the layer worth fixing."),
+      legend,
+    ];
+
+    for (const c of r.calls) {
+      const when = c.startedAt ? new Date(c.startedAt).toLocaleString() : "unknown time";
+      kids.push(el("div", { class: "lat-call" },
+        el("div", { class: "lat-head" },
+          el("b", {}, ms(c.averages.total)),
+          el("span", { class: "small muted" },
+            ` average over ${c.turns} turn${c.turns > 1 ? "s" : ""} · ${when}`)),
+        latencyBar(c.averages),
+        el("div", { class: "lat-nums" },
+          ...LAYERS.map((l) =>
+            el("span", { class: "small" },
+              el("span", { class: "muted" }, `${l.label} `),
+              el("span", { class: "mono" }, ms(c.averages[l.key]))))),
+        c.interruptions.assistant
+          ? el("div", { class: "small muted", style: "margin-top:6px" },
+              `Agent interrupted the caller ${c.interruptions.assistant} time(s) — ` +
+              "if that is climbing, the endpointing wait is too short.")
+          : null,
+        // Per-turn rows, because an average hides the one 4-second turn that is
+        // what the caller actually remembers.
+        el("details", { class: "lat-turns" },
+          el("summary", { class: "small muted" }, `each turn (${c.turns})`),
+          el("table", { class: "lat-table" },
+            el("tr", {},
+              el("th", {}, "#"),
+              ...LAYERS.map((l) => el("th", {}, l.label)),
+              el("th", {}, "total")),
+            ...c.turnLatencies.map((t, i) =>
+              el("tr", {},
+                el("td", { class: "muted" }, String(i + 1)),
+                ...LAYERS.map((l) => el("td", { class: "mono" }, ms(t[l.key]))),
+                el("td", { class: "mono" }, ms(t.total))))))));
+    }
+    mount(card, ...kids);
+  }).catch((e) => {
+    mount(card, el("h3", {}, "Latency"), el("div", { class: "muted" }, String(e.message)));
+  });
+
+  return card;
 }
 
 const tr = (k, v) => el("tr", {}, el("td", {}, k), el("td", {}, String(v ?? "-")));
@@ -500,13 +1237,18 @@ function route() {
   }
 
   const talk = hash.match(/^#\/talk\/(.+)$/);
-  const detail = hash.match(/^#\/detail\/(.+)$/);
+  // The trailing segment is the tab. Optional, so old links still work.
+  const detail = hash.match(/^#\/detail\/([^/]+)(?:\/([a-z]+))?$/);
 
+  if (hash === "#/" || hash === "") return screenLanding();
+  if (hash === "#/personas") return screenList();
   if (hash === "#/new") return screenNew();
   if (talk) return screenTalk(decodeURIComponent(talk[1]));
-  if (detail) return screenDetail(decodeURIComponent(detail[1]));
-  return screenList();
+  if (detail) return screenDetail(decodeURIComponent(detail[1]), detail[2] ?? "tune");
+  return screenLanding();
 }
+
+document.getElementById("home").onclick = () => go("#/");
 
 document.getElementById("theme").onclick = () => {
   store.theme = store.theme === "dark" ? "light" : "dark";
